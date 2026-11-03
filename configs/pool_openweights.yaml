@@ -1,0 +1,15 @@
+# PLANTILLA de pool. Sustituye `revision` por el commit HF exacto (obligatorio).
+# Familias tomadas de LLMRouterBench (pool ligero) y R2-Bench (rango 0.6B-235B). Elige 12-20.
+gpu: {type: "A100-80G", usd_per_hour: 1.8, n_gpus_default: 1, price_date: "2026-10", source: "supuesto; sustituir"}
+models:
+  Qwen/Qwen3-0.6B:                 {revision: PIN_ME, thinking: true,  size_b: 0.6, tp: 1}
+  Qwen/Qwen3-8B:                   {revision: PIN_ME, thinking: true,  size_b: 8,   tp: 1}
+  meta-llama/Llama-3.1-8B-Instruct: {revision: PIN_ME, thinking: false, size_b: 8,   tp: 1}
+  google/gemma-2-9b-it:            {revision: PIN_ME, thinking: false, size_b: 9,   tp: 1}
+  zai-org/GLM-Z1-9B-0414:          {revision: PIN_ME, thinking: true,  size_b: 9,   tp: 1}
+  Qwen/Qwen2.5-Coder-7B-Instruct:  {revision: PIN_ME, thinking: false, size_b: 7,   tp: 1}
+  deepseek-ai/DeepSeek-R1-0528-Qwen3-8B: {revision: PIN_ME, thinking: true, size_b: 8, tp: 1}
+  meta-llama/Llama-3.1-70B-Instruct: {revision: PIN_ME, thinking: false, size_b: 70, tp: 4}
+  Qwen/Qwen3-235B-A22B-Instruct-2507: {revision: PIN_ME, thinking: false, size_b: 235, tp: 8}
+# Jueces (familias distintas; idealmente fuera del pool evaluado)
+judges: [Qwen/Qwen3-32B, mistralai/Mistral-Small-3.2-24B-Instruct-2506, meta-llama/Llama-3.3-70B-Instruct]

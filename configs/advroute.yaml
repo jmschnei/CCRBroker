@@ -1,0 +1,5 @@
+benign: [typos, whitespace, pad, option_shuffle, paraphrase, translate_es_de_fr]
+attacks: {gadget_black_box: {length: 10, iters: 200}, adaptive_vs_detector: true}
+objectives: [inflate_cost, degrade_quality]
+report: [flip_rate, cost_multiplier, quality_drop, consistency]
+ethics: "divulgación responsable; publicar defensa junto al ataque; no atacar servicios de terceros"

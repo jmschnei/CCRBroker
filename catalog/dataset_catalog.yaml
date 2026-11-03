@@ -1,0 +1,84 @@
+# Catálogo de datasets/benchmarks para routing. Fecha de verificación: 2026-10-21 (búsqueda web).
+# verified: true  = hechos leídos en la fuente (ficha HF / README / artículo) en esta sesión.
+# verified: false = procede de mi memoria o no se pudo confirmar -> comprobar antes de usar.
+# licence: NO se pudo leer en ninguna ficha consultada; hay que verificarla en la fuente.
+reuse:
+  - id: llmrouterbench_open7b
+    name: LLMRouterBench (pool ligero, ~7-9B pesos abiertos)
+    source: https://github.com/ynulihao/LLMRouterBench   # arXiv:2601.07206
+    verified: true
+    facts:
+      models: 20 modelos open-weights ~7-9B (Qwen3-8B, DS-Qwen3, GLM-Z1-9B, Llama-3.1-8B, Gemma-2-9B, Nemotron-Nano-9B, ...)
+      datasets: 15 (AIME, MATH500, MathBench, MBPP, HumanEval, LiveCodeBench, KORBench, K&K, BBH, MMLU-Pro, GPQA, FinQA, MedQA, EmoryNLP, MELD)
+      prompts: 11480
+      instances: 229600
+      generation: {temperature: 0.2, top_p: 1.0, engine: "vLLM 0.8.4", hardware: "A800-80G"}
+      splits: "70/30, 5 semillas (42, 999, 2024, 2025, 3407)"
+      cost_info: "tokens in/out por instancia (en esta pool no hay precio de API; coste derivable con pricing.py)"
+      compute_to_build: "~1000 horas A800 (dato del artículo)"
+    use_for: [E1, E2, E8-parcial]
+    role: "Fase 1: datos ya generados con el mismo tipo de pool que tú puedes autoalojar"
+    caveats: ["una sola config por modelo (sin esfuerzo/longitud)", "sin español", "snapshot de 2025"]
+  - id: llmrouterbench_flagship
+    name: LLMRouterBench (pool de 13 modelos de frontera)
+    verified: true
+    facts: {datasets: 10, prompts: 12446, instances: 161520, api_cost_usd: 2771.84,
+            includes: "GPT-5, Gemini 2.5, Claude Sonnet 4, DeepSeek, Qwen3-235B, Kimi-K2, GLM-4.6, ..."}
+    use_for: [E1, E2]
+    role: "Comparación con la literatura; no lo podrás regenerar con solo pesos abiertos (incluye propietarios)"
+  - id: routerbench
+    name: RouterBench
+    source: https://huggingface.co/datasets/withmartian/routerbench   # DOI 10.57967/hf/1996
+    verified: true
+    facts: {prompts: "~30000", outcomes: "405k+", llms: 11, tasks: "MBPP, GSM8K, Winogrande, HellaSwag, MMLU, MT-Bench, ...",
+            variants: "0-shot y 5-shot", format: "pickle (cuidado: ejecuta código al cargar)", language: English}
+    use_for: [E1]
+    caveats: ["modelos antiguos (GPT-4/3.5, Claude v1/2, ...)", "una sola vuelta", "licencia no visible en la ficha consultada"]
+    adapter: routedata/adapters/routerbench.py
+  - id: sprout
+    name: SPROUT (CARROT)
+    source: https://huggingface.co/datasets/CARROT-LLM-Routing/SPROUT
+    verified: true
+    facts: {llms: 13, benchmarks: "GPQA, MuSR, MMLU-Pro, MATH, OpenHermes, RAGBench", judge: "Llama-3.1-70B-Instruct",
+            token_counts: "in/out por par LLM-prompt", format: parquet}
+    use_for: [E1, E2, E3-base]
+  - id: r2bench
+    name: R2-Bench
+    source: arXiv:2602.02823 (ICML 2026)
+    verified: partial   # estructura verificada; DISPONIBILIDAD PÚBLICA de los datos NO verificada
+    facts: {queries: 30968, categories: 20, sources: "MMLU-Pro 8264, OpenHermes 13670, MATH 5122, GPQA 384, MuSR 100, RAGBench",
+            llms: "15 (0.6B-235B)", budgets_tokens: "10,20,30,40,50,80,100,150,200,300,500,800,1200,2000,4000,default",
+            judge: "Qwen3-80B-Instruct (Pearson 0.82 con 500 respuestas anotadas por 30 humanos)",
+            metrics: "AUDC, QNC, Peak Quality", collection_hw: "8x B200"}
+    use_for: [E3, E4-parcial]
+    role: "Blueprint metodológico de ConfigRoute; si los datos no son públicos, replicar el protocolo"
+  - id: routerarena
+    name: RouterArena
+    source: https://huggingface.co/datasets/RouteWorks/RouterArena
+    verified: true
+    facts: {questions: 8400, domains: 9, categories: 44, difficulty: "fácil/medio/difícil",
+            splits: {sub_10: 809, full: 8400, robustness: 420}}
+    eval_only: true
+    rule: "Prohibido entrenar/ajustar routers con estos datos (README del proyecto). Solo evaluación y leaderboard."
+    use_for: [E1-externo, E6-parcial]
+    adapter: routedata/adapters/routerarena.py
+  - id: routereval
+    name: RouterEval
+    verified: partial   # solo descrito en otros artículos (8500 LLMs x 12 benchmarks; sin información de coste)
+    use_for: [E2-parcial]
+  - id: fusionfactory_embedllm
+    name: FusionFactory / EmbedLLM
+    verified: partial
+    use_for: [baselines]
+  - id: arena_preferences
+    name: Preferencias de Chatbot Arena (usadas por RouteLLM)
+    verified: false
+    use_for: [baseline-RouteLLM]
+    caveats: ["comprobar licencia y versión exacta del dataset", "sesgo de estilo/longitud"]
+task_sources_for_new_data:   # materia prima para ConfigRoute/AgentRoute (todas verified:false salvo mención)
+  knowledge_reasoning: [MMLU-Pro, GPQA, BBH, KORBench, MuSR]          # presentes en LLMRouterBench/R2-Bench
+  math: [MATH500, AIME, MathBench]
+  code: [HumanEval, MBPP, LiveCodeBench]
+  open_ended: [OpenHermes, ArenaHard]                                  # requieren juez
+  multilingual_candidates: [MGSM, Global-MMLU, MMLU-ProX, Belebele]    # verified:false -> elegir y verificar
+  agentic: [tau2-bench (arXiv:2506.07982), ScienceWorld, "SWE-bench Verified", HotpotQA]  # licencias a verificar

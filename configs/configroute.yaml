@@ -1,0 +1,10 @@
+n_queries_total: 20000
+languages: {en: 0.7, es: 0.15, de: 0.075, fr: 0.075}
+quotas_by_domain: {math: 0.2, science: 0.15, code: 0.15, knowledge: 0.2, instruction_open: 0.2, reasoning_logic: 0.1}
+hard_reasoning_share: 0.30
+efforts: [nothink, think_low, think_mid, think_high]     # solo para modelos con thinking=true
+budgets_tokens: [50, 100, 200, 500, 1200, null]            # 6 anclas (R2-Router: 6-8 anclas bastan); null = por defecto (tope 4000)
+generation: {temperature: 0.2, top_p: 1.0, seeds: [0]}
+labels: {verifier_first: true, judge_ensemble: 3, human_audit_n: 500, target_pearson: 0.8, target_kappa: 0.7}
+splits: {iid: [0.7, 0.3], seeds: [42, 999, 2024, 2025, 3407], cluster_k: 64}
+holdout_private_share: 0.10     # partición privada para leaderboard

@@ -1,0 +1,5 @@
+envs: [tau2-bench, scienceworld, swe-bench-verified-subset, hotpotqa-multihop]
+max_trajectories_counterfactual: 2000
+mixed_policies: [fixed_each_model, switch_every_k(2,4,8), random]
+log_switch_prefill: true
+user_simulator: "modelo local fijo (declararlo: afecta a la reproducibilidad)"

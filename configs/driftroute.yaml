@@ -1,0 +1,9 @@
+subset_queries: 3000
+cadence: monthly            # re-ejecución sobre la misma muestra
+n_snapshots: 8
+planned_events:             # ajusta a lo que ocurra realmente; registra cada cambio en el manifiesto
+  - {snapshot: 2, type: add_model,   note: "nuevo modelo abierto relevante"}
+  - {snapshot: 3, type: price_change, factor: 0.5, note: "bajada de precio de GPU/proveedor"}
+  - {snapshot: 4, type: new_revision, note: "nueva revisión de un modelo del pool"}
+  - {snapshot: 5, type: retire_model, note: "baja de un modelo"}
+  - {snapshot: 6, type: new_query_batch, note: "lote de consultas posteriores al corte"}
