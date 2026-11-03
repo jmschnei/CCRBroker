@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "routing_data_kit"
+version = "0.1.0"
+description = "Kit para construir y reutilizar datasets de routing LLM sobre modelos de pesos abiertos (E1-E8)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Julian Moreno Schneider", email = "jmschnei@users.noreply.github.com" },
+]
+keywords = ["llm-routing", "router-benchmark", "llmrouterbench", "routerbench", "open-weights"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24,<3.0",
+    "pydantic>=2.5,<3.0",
+    "pyyaml>=6.0,<7.0",
+    "jsonlines>=4.0,<5.0",
+    "pyarrow>=14.0,<19.0",
+    "requests>=2.31,<3.0",
+    "tenacity>=8.2,<9.0",
+    "httpx>=0.26,<0.29",
+    "tqdm>=4.66,<5.0",
+    "rich>=13.0,<14.0",
+    "python-dotenv>=1.0,<2.0",
+    "openai>=1.30,<2.0",        # solo para el modo Mock/compat; no requiere key
+]
+
+[project.optional-dependencies]
+vllm = ["vllm>=0.6.0"]
+eval = [
+    "datasets>=2.16,<4.0",
+    "rouge-score>=0.1",
+    "sacrebleu>=2.4,<3.0",
+    "jiwer>=3.0,<4.0",
+    "langdetect>=1.0",
+    "spacy>=3.6,<4.0",
+    "nltk>=3.8,<4.0",
+    "transformers>=4.40,<5.0",
+]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-cov>=5.0,<7.0",
+    "ruff>=0.4,<1.0",
+    "mypy>=1.8,<2.0",
+    "ipython>=8.0,<9.0",
+    "pre-commit>=3.5,<5.0",
+]
+
+[project.urls]
+Repository = "https://github.com/jmschnei/CCRBroker"
+
+[project.scripts]
+routing-budget = "estimate_budget:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["routedata*", "generate*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = [".venv", "venv", "outputs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
