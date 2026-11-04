@@ -1,0 +1,433 @@
+"""
+Validación de datasets de LLM routing.
+
+Verifica la integridad y estructura de los datos descargados en data/raw/:
+  - RouterBench: data/raw/routerbench/*.pkl
+  - SPROUT:      data/raw/sprout/*.parquet
+  - LLMRouterBench: data/raw/llmrouterbench/extracted/**/*.json
+  - R2-Bench:    data/raw/r2bench/data/*/*/*.csv
+
+Uso:
+    from routedata.validate import validate_all
+    reports = validate_all()
+    for name, report in reports.items():
+        print(f"{name}: {'OK' if report['valid'] else 'FAIL'}")
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import pickle
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+DATA_ROOT = Path(__file__).resolve().parent.parent / "data"
+
+
+@dataclass
+class ValidationReport:
+    """Resultado de la validación de un dataset."""
+
+    dataset: str
+    valid: bool
+    total_files: int = 0
+    total_records: int = 0
+    total_models: int = 0
+    columns: List[str] = field(default_factory=list)
+    expected_columns: List[str] = field(default_factory=list)
+    missing_columns: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    sample: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "dataset": self.dataset,
+            "valid": self.valid,
+            "total_files": self.total_files,
+            "total_records": self.total_records,
+            "total_models": self.total_models,
+            "columns": self.columns,
+            "expected_columns": self.expected_columns,
+            "missing_columns": self.missing_columns,
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "sample": self.sample,
+        }
+
+
+# ---------------------------------------------------------------------------
+# RouterBench
+# ---------------------------------------------------------------------------
+
+ROUTERBENCH_REQUIRED_COLUMNS = {
+    "sample_id",
+    "prompt",
+    "oracle_model_to_route_to",
+}
+
+
+def validate_routerbench(data_root: Path = DATA_ROOT) -> ValidationReport:
+    """Valida los archivos .pkl de RouterBench."""
+    report = ValidationReport(
+        dataset="routerbench",
+        valid=False,
+        expected_columns=sorted(ROUTERBENCH_REQUIRED_COLUMNS),
+    )
+
+    raw_dir = data_root / "raw" / "routerbench"
+    pkl_files = sorted(raw_dir.glob("*.pkl")) if raw_dir.exists() else []
+
+    if not pkl_files:
+        report.errors.append(f"No .pkl files found in {raw_dir}")
+        return report
+
+    report.total_files = len(pkl_files)
+
+    try:
+        import pandas as pd
+
+        total_rows = 0
+        for pkl_file in pkl_files:
+            with open(pkl_file, "rb") as f:
+                df = pd.read_pickle(f)
+
+            total_rows += len(df)
+            missing = ROUTERBENCH_REQUIRED_COLUMNS - set(df.columns)
+            if missing:
+                report.errors.append(f"{pkl_file.name}: missing columns {sorted(missing)}")
+            else:
+                report.warnings.append(f"{pkl_file.name}: OK ({len(df)} rows)")
+
+            # Collect all columns
+            report.columns = sorted(set(report.columns) | set(df.columns))
+
+            # Sample
+            if report.sample is None:
+                row = df.iloc[0]
+                report.sample = {
+                    "sample_id": str(row.get("sample_id", ""))[:50],
+                    "prompt": str(row.get("prompt", ""))[:100],
+                    "oracle": str(row.get("oracle_model_to_route_to", "")),
+                }
+
+        report.total_records = total_rows
+        report.missing_columns = sorted(ROUTERBENCH_REQUIRED_COLUMNS - set(report.columns))
+        report.valid = len(report.errors) == 0
+        if report.valid:
+            logger.info(f"RouterBench: OK ({total_rows} rows, {len(pkl_files)} files)")
+        else:
+            logger.warning(f"RouterBench: errors={report.errors[:3]}")
+    except Exception as e:
+        report.errors.append(f"Validation error: {e}")
+        logger.exception("RouterBench validation failed")
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# SPROUT
+# ---------------------------------------------------------------------------
+
+SPROUT_REQUIRED_COLUMNS = {
+    "prompt",
+    "golden_answer",
+}
+
+
+def validate_sprout(data_root: Path = DATA_ROOT) -> ValidationReport:
+    """Valida los archivos .parquet de SPROUT."""
+    report = ValidationReport(
+        dataset="sprout",
+        valid=False,
+        expected_columns=sorted(SPROUT_REQUIRED_COLUMNS),
+    )
+
+    raw_dir = data_root / "raw" / "sprout"
+    pq_files = sorted(raw_dir.glob("*.parquet")) if raw_dir.exists() else []
+
+    if not pq_files:
+        report.errors.append(f"No .parquet files found in {raw_dir}")
+        return report
+
+    report.total_files = len(pq_files)
+
+    try:
+        import pandas as pd
+
+        total_rows = 0
+        for pq_file in pq_files:
+            df = pd.read_parquet(pq_file)
+            total_rows += len(df)
+
+            missing = SPROUT_REQUIRED_COLUMNS - set(df.columns)
+            if missing:
+                report.errors.append(f"{pq_file.name}: missing columns {sorted(missing)}")
+            else:
+                report.warnings.append(f"{pq_file.name}: OK ({len(df)} rows)")
+
+            report.columns = sorted(set(report.columns) | set(df.columns))
+
+            if report.sample is None:
+                row = df.iloc[0]
+                report.sample = {
+                    "prompt": str(row.get("prompt", ""))[:100],
+                    "golden_answer": str(row.get("golden_answer", ""))[:100],
+                }
+
+        report.total_records = total_rows
+        report.missing_columns = sorted(SPROUT_REQUIRED_COLUMNS - set(report.columns))
+        report.valid = len(report.errors) == 0
+        if report.valid:
+            logger.info(f"SPROUT: OK ({total_rows} rows, {len(pq_files)} files)")
+        else:
+            logger.warning(f"SPROUT: errors={report.errors[:3]}")
+    except Exception as e:
+        report.errors.append(f"Validation error: {e}")
+        logger.exception("SPROUT validation failed")
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# LLMRouterBench
+# ---------------------------------------------------------------------------
+
+LLMROUTERBENCH_REQUIRED_KEYS = {
+    "model_name",
+    "dataset_name",
+    "records",
+}
+
+
+def validate_llmrouterbench(data_root: Path = DATA_ROOT) -> ValidationReport:
+    """Valida los archivos .json de LLMRouterBench."""
+    report = ValidationReport(
+        dataset="llmrouterbench",
+        valid=False,
+        expected_columns=sorted(LLMROUTERBENCH_REQUIRED_KEYS),
+    )
+
+    extracted_dir = data_root / "raw" / "llmrouterbench" / "extracted"
+    if not extracted_dir.exists():
+        extracted_dir = data_root / "raw" / "llmrouterbench"
+
+    json_files = sorted(extracted_dir.rglob("*.json")) if extracted_dir.exists() else []
+
+    if not json_files:
+        report.errors.append(f"No .json files found in {extracted_dir}")
+        return report
+
+    report.total_files = len(json_files)
+
+    models = set()
+    total_records = 0
+    errors_count = 0
+
+    for json_file in json_files[:10]:  # Check first 10 files as sample
+        try:
+            with open(json_file) as f:
+                data = json.load(f)
+
+            missing = LLMROUTERBENCH_REQUIRED_KEYS - set(data.keys())
+            if missing:
+                errors_count += 1
+                report.errors.append(f"{json_file.name}: missing keys {sorted(missing)}")
+                continue
+
+            if "records" in data:
+                total_records += len(data["records"])
+
+            if "model_name" in data:
+                models.add(data["model_name"])
+
+            if report.sample is None:
+                records = data.get("records", [])
+                if records:
+                    record = records[0]
+                    report.sample = {
+                        "model": data.get("model_name", ""),
+                        "dataset": data.get("dataset_name", ""),
+                        "instance_id": str(record.get("instance_id", ""))[:50],
+                        "prompt": str(record.get("prompt", ""))[:100],
+                    }
+
+        except Exception as e:
+            errors_count += 1
+            report.errors.append(f"{json_file.name}: {e}")
+
+    if errors_count:
+        report.errors.append(f"{errors_count} files with errors (checked first 10)")
+
+    report.total_records = total_records
+    report.total_models = len(models)
+    report.columns = sorted(models)
+    report.valid = errors_count == 0
+    if report.valid:
+        logger.info(f"LLMRouterBench: OK ({report.total_files} files, {len(models)} models)")
+    else:
+        logger.warning(f"LLMRouterBench: errors={report.errors[:3]}")
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# R2-Bench
+# ---------------------------------------------------------------------------
+
+R2BENCH_REQUIRED_COLUMNS = {
+    "prompts_id",
+    "key",
+    "original_prompt",
+    "golden_answer",
+    "response",
+}
+# correctness_score es opcional: algunos archivos solo tienen judge_raw
+
+
+def validate_r2bench(data_root: Path = DATA_ROOT) -> ValidationReport:
+    """Valida los archivos .csv de R2-Bench."""
+    report = ValidationReport(
+        dataset="r2bench",
+        valid=False,
+        expected_columns=sorted(R2BENCH_REQUIRED_COLUMNS),
+    )
+
+    data_dir = data_root / "raw" / "r2bench" / "data"
+    if not data_dir.exists():
+        report.errors.append(f"R2-Bench data directory not found: {data_dir}")
+        return report
+
+    csv_files = sorted(data_dir.rglob("*.csv"))
+    if not csv_files:
+        report.errors.append(f"No .csv files found in {data_dir}")
+        return report
+
+    report.total_files = len(csv_files)
+
+    models = set()
+    total_rows = 0
+    errors_count = 0
+
+    # Check a sample of files (first 5 per model)
+    from collections import defaultdict
+    model_files: Dict[str, List[Path]] = defaultdict(list)
+    for f in csv_files:
+        # data/<org>/<model>/<budget>_judge.csv
+        parts = f.parts
+        # Find model name (2nd level under data/)
+        if len(parts) >= 4:
+            model_key = f"{parts[-3]}/{parts[-2]}"
+            model_files[model_key].append(f)
+        else:
+            model_files["unknown"].append(f)
+
+    checked_files = 0
+    for model_key, files in model_files.items():
+        for f in files[:3]:  # Check first 3 per model
+            try:
+                import pandas as pd
+                df = pd.read_csv(f, nrows=100)  # Read first 100 rows
+                missing = R2BENCH_REQUIRED_COLUMNS - set(df.columns)
+                if missing:
+                    errors_count += 1
+                    report.errors.append(f"{f.name}: missing columns {sorted(missing)}")
+                else:
+                    models.add(model_key)
+                    total_rows += len(df)
+                    checked_files += 1
+
+                if report.sample is None and len(df) > 0:
+                    row = df.iloc[0]
+                    sample = {
+                        "prompts_id": row.get("prompts_id", ""),
+                        "key": str(row.get("key", ""))[:30],
+                        "prompt": str(row.get("original_prompt", ""))[:100],
+                        "golden_answer": str(row.get("golden_answer", ""))[:100],
+                    }
+                    if "correctness_score" in df.columns:
+                        sample["score"] = row.get("correctness_score", "")
+                    report.sample = sample
+
+            except Exception as e:
+                errors_count += 1
+                report.errors.append(f"{f.name}: {e}")
+
+    if errors_count:
+        report.errors.append(f"{errors_count} files with errors")
+
+    report.total_records = total_rows
+    report.total_models = len(models)
+    report.columns = sorted(models)
+    report.valid = errors_count == 0
+    if report.valid:
+        logger.info(f"R2-Bench: OK ({report.total_files} files, {len(models)} models)")
+    else:
+        logger.warning(f"R2-Bench: errors={report.errors[:3]}")
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Aggregate
+# ---------------------------------------------------------------------------
+
+def validate_all(data_root: Path = DATA_ROOT) -> Dict[str, ValidationReport]:
+    """Validates all datasets and returns a dict of reports."""
+    reports = {}
+    for name, func in [
+        ("routerbench", validate_routerbench),
+        ("sprout", validate_sprout),
+        ("llmrouterbench", validate_llmrouterbench),
+        ("r2bench", validate_r2bench),
+    ]:
+        reports[name] = func(data_root)
+
+    return reports
+
+
+def print_summary(reports: Dict[str, ValidationReport]) -> None:
+    """Prints a human-readable summary of validation results."""
+    print("\n" + "=" * 70)
+    print("VALIDATION SUMMARY")
+    print("=" * 70)
+
+    for name, report in reports.items():
+        status = "✅ OK" if report.valid else "❌ FAIL"
+        print(f"\n{name.upper():<20} {status}")
+        print(f"  Files:     {report.total_files}")
+        print(f"  Records:   {report.total_records}")
+        print(f"  Models:    {report.total_models}")
+        if report.columns:
+            print(f"  Columns:   {', '.join(report.columns[:10])}")
+        if report.sample:
+            print(f"  Sample:    {report.sample}")
+        if report.errors:
+            print(f"  Errors:")
+            for err in report.errors[:5]:
+                print(f"    - {err}")
+        if report.warnings:
+            print(f"  Warnings:")
+            for warn in report.warnings[:5]:
+                print(f"    - {warn}")
+
+    print("\n" + "=" * 70)
+
+
+def main() -> None:
+    """CLI entry point."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    reports = validate_all()
+    print_summary(reports)
+
+    # Exit non-zero if any validation failed
+    if not all(r.valid for r in reports.values()):
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
