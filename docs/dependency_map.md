@@ -152,7 +152,7 @@ from generate.agentroute import run_episode, collect_step_utilities, TaskRouter,
 
 **Dependencias directas:**
 - ✅ `routedata/schema.py` — Query/Config pydantic models
-- ✅ `routedata/agent.py` — utilidades para episodes y routing decisions
+- ✅ `routedata/agent_routing.py` — utilidades para episodes y routing decisions
 - ✅ `generate/backends.py` — VLLMBackend real o MockBackend
 - ✅ `generate/envs/` — entornos (synthetic + adapters_template)
 

@@ -23,7 +23,7 @@ Modelos: pásalos de más barato a más caro (--models small,mid,big).
 - `from backends import MockBackend, OpenAICompatBackend`
 - `from concurrent.futures import ThreadPoolExecutor`
 - `from envs import get_env_factory`
-- `from routedata import agent`
+- `from routedata import agent_routing`
 - `from routedata.schema import load_table`
 - `import argparse`
 - `import json`
