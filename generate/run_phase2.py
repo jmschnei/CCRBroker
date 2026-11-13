@@ -110,7 +110,7 @@ def main(argv=None):
         else:
             from .backends import VLLMBackend
 
-            judges = [VLLMBackend(j, "main") for j in pool["judges"]]  # fija revisión real de cada juez
+            judges = [VLLMBackend(j["name"], j["revision"]) for j in pool["judges"]]  # revisión fijada
         lab = P2.apply_judges(q, r, judges)
         lab.to_json(os.path.join(a.run_dir, "labels_judge.jsonl"), orient="records", lines=True)
         print(len(lab), "respuestas juzgadas")

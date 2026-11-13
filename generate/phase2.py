@@ -201,12 +201,17 @@ def human_label_layer(merged):
     )
 
 
+def _table_md(df: pd.DataFrame) -> str:
+    try:
+        return str(df.to_markdown(index=False))  # requiere `tabulate`
+    except ImportError:
+        return "```\n" + str(df.to_string(index=False)) + "\n```"
+
+
 def render_report_md(report: pd.DataFrame, gate_res: dict) -> str:
     lines = [
         "# Informe del piloto ConfigRoute\n",
-        report.round(3).to_markdown(index=False)
-        if hasattr(report, "to_markdown")
-        else report.round(3).to_string(index=False),
+        _table_md(report.round(3)),
         "\n## Puertas\n",
     ]
     for k, (ok, det) in gate_res.items():

@@ -1,15 +1,19 @@
-# PLANTILLA de pool. Sustituye `revision` por el commit HF exacto (obligatorio).
+# Pool de modelos de pesos abiertos. `revision` = commit HF exacto de `main` (obligatorio).
+revision_checked_at: "2026-11-13"  # SHAs consultados en la API de Hugging Face
 # Familias tomadas de LLMRouterBench (pool ligero) y R2-Bench (rango 0.6B-235B). Elige 12-20.
 gpu: {type: "A100-80G", usd_per_hour: 1.8, n_gpus_default: 1, price_date: "2026-10", source: "supuesto; sustituir"}
 models:
-  Qwen/Qwen3-0.6B:                 {revision: PIN_ME, thinking: true,  size_b: 0.6, tp: 1}
-  Qwen/Qwen3-8B:                   {revision: PIN_ME, thinking: true,  size_b: 8,   tp: 1}
-  meta-llama/Llama-3.1-8B-Instruct: {revision: PIN_ME, thinking: false, size_b: 8,   tp: 1}
-  google/gemma-2-9b-it:            {revision: PIN_ME, thinking: false, size_b: 9,   tp: 1}
-  zai-org/GLM-Z1-9B-0414:          {revision: PIN_ME, thinking: true,  size_b: 9,   tp: 1}
-  Qwen/Qwen2.5-Coder-7B-Instruct:  {revision: PIN_ME, thinking: false, size_b: 7,   tp: 1}
-  deepseek-ai/DeepSeek-R1-0528-Qwen3-8B: {revision: PIN_ME, thinking: true, size_b: 8, tp: 1}
-  meta-llama/Llama-3.1-70B-Instruct: {revision: PIN_ME, thinking: false, size_b: 70, tp: 4}
-  Qwen/Qwen3-235B-A22B-Instruct-2507: {revision: PIN_ME, thinking: false, size_b: 235, tp: 8}
+  Qwen/Qwen3-0.6B:                 {revision: c1899de289a04d12100db370d81485cdf75e47ca, thinking: true,  size_b: 0.6, tp: 1}
+  Qwen/Qwen3-8B:                   {revision: b968826d9c46dd6066d109eabc6255188de91218, thinking: true,  size_b: 8,   tp: 1}
+  meta-llama/Llama-3.1-8B-Instruct: {revision: 0e9e39f249a16976918f6564b8830bc894c89659, thinking: false, size_b: 8,   tp: 1}
+  google/gemma-2-9b-it:            {revision: 11c9b309abf73637e4b6f9a3fa1e92e615547819, thinking: false, size_b: 9,   tp: 1}
+  zai-org/GLM-Z1-9B-0414:          {revision: b221b06fefb23ca320922cf6e68ab5f2fb82de81, thinking: true,  size_b: 9,   tp: 1}
+  Qwen/Qwen2.5-Coder-7B-Instruct:  {revision: c03e6d358207e414f1eca0bb1891e29f1db0e242, thinking: false, size_b: 7,   tp: 1}
+  deepseek-ai/DeepSeek-R1-0528-Qwen3-8B: {revision: 6e8885a6ff5c1dc5201574c8fd700323f23c25fa, thinking: true, size_b: 8, tp: 1}
+  meta-llama/Llama-3.1-70B-Instruct: {revision: 1605565b47bb9346c5515c34102e054115b4f98b, thinking: false, size_b: 70, tp: 4}
+  Qwen/Qwen3-235B-A22B-Instruct-2507: {revision: ac9c66cc9b46af7306746a9250f23d47083d689e, thinking: false, size_b: 235, tp: 8}
 # Jueces (familias distintas; idealmente fuera del pool evaluado)
-judges: [Qwen/Qwen3-32B, mistralai/Mistral-Small-3.2-24B-Instruct-2506, meta-llama/Llama-3.3-70B-Instruct]
+judges:
+  - {name: Qwen/Qwen3-32B, revision: 9216db5781bf21249d130ec9da846c4624c16137}
+  - {name: mistralai/Mistral-Small-3.2-24B-Instruct-2506, revision: 95a6d26c4bfb886c58daf9d3f7332c857cb27b43}
+  - {name: meta-llama/Llama-3.3-70B-Instruct, revision: 6f6073b423013f6a7d4d9f39144961bfbfbc386b}

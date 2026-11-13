@@ -23,8 +23,8 @@
 
 ## Fase 0 · Infraestructura
 
-- ✅ SHA de commit fijados para los 9 modelos del pool y los 3 jueces; verificados contra la API de Hugging Face el 2026-11-09.
-- ✅ `python tests/test_synthetic.py`: 7 pruebas pasan; última suite completa: 38 pasan.
+- ✅ SHA de commit fijados para los 9 modelos del pool y los 3 jueces; verificados contra la API de Hugging Face el 2026-11-13 (`revision_checked_at`).
+- ✅ `python tests/test_synthetic.py`: 7 pruebas pasan; última suite completa (2026-11-13): 53 pasan.
 - ✅ Añadido `scripts/benchmark_vllm.py` y el target `make phase0-measure` para medir throughput agregado, derivar precios y guardar resultados en JSONL.
 - ⏸️ Gate aún abierto: el host disponible es un Mac M2 Max, no tiene NVIDIA/CUDA y no tiene vLLM; no se han medido tok/s reales ni derivado precios. El coste GPU A100 de `pool_openweights.yaml` continúa siendo un supuesto.
 

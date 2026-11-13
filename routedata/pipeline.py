@@ -15,7 +15,7 @@ import pandas as pd
 
 from .adapters.llmrouterbench import LLMRouterBenchAdapter
 from .adapters.r2bench import R2BenchAdapter
-from .adapters.routerbench import load as load_routerbench
+from .adapters.routerbench import load_both as load_routerbench
 from .adapters.sprout import create_sprout_adapter
 
 

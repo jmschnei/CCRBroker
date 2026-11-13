@@ -13,7 +13,7 @@ def test_all_pool_and_judge_revisions_are_pinned():
     pool = yaml.safe_load((ROOT / "configs" / "pool_openweights.yaml").read_text())
     entries = [*pool["models"].values(), *pool["judges"]]
 
-    assert pool["revision_checked_at"] == "2026-11-09"
+    assert pool["revision_checked_at"] == "2026-11-13"
     assert len(pool["models"]) == 9
     assert len(pool["judges"]) == 3
     assert all(len(entry["revision"]) == 40 for entry in entries)

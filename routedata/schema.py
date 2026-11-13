@@ -109,7 +109,8 @@ def validate(df: pd.DataFrame, kind: str) -> list[str]:
         key = ["query_id", "config_id"] + (["run_id"] if "run_id" in df.columns else [])
         if df.duplicated(key).any():
             problems.append("responses: pares (query, config, run) duplicados")
-        if not df["correct"].between(0, 1).all():
+        # NaN = respuesta sin etiqueta (p. ej. 154 de RouterBench): se conserva, no es un error
+        if not df["correct"].dropna().between(0, 1).all():
             problems.append("responses: 'correct' fuera de [0,1]")
         if (df["in_tokens"] < 0).any() or (df["out_tokens"] < 0).any():
             problems.append("responses: tokens negativos")

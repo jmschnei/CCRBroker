@@ -1,52 +1,55 @@
-"""LLMRouterBench → unified schema adapter."""
+"""LLMRouterBench → esquema unificado.
+
+Entrada: data/raw/llmrouterbench/extracted/bench-release/<dataset>/<split>/<modelo>/*.json.
+Cada JSON trae agregados (performance, cost, tokens...) y `records`, uno por consulta, con
+index/instance_id, origin_query, prompt (plantilla de inferencia), prompt_tokens,
+completion_tokens, cost, score, prediction y ground_truth.
+
+Salida (una respuesta por par consulta-modelo OBSERVADO; no se rellena el producto cartesiano):
+- queries: query_id = "<dataset>/<split>/<instance_id|index>", text = origin_query,
+  prompt = prompt de inferencia, prompt_variant_count = nº de prompts distintos entre modelos,
+  answer = ground_truth.
+- responses: correct = score del record (label_source="per_record"); si falta, se usa el
+  `performance` del fichero (label_source="aggregate_fallback": NO es etiqueta por instancia).
+  Tokens negativos publicados se normalizan a ausentes (NaN).
+"""
 
 import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from .base import wide_to_tables
+SOURCE = "llmrouterbench"
+RESPONSE_TEXT_MAX = 2000  # la predicción se trunca: el texto completo sigue en data/raw
+
+
+def _num(v) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 class LLMRouterBenchAdapter:
-    """LLMRouterBench adapter.
-
-    Input: data/raw/llmrouterbench/extracted/bench-release/<dataset>/<split>/<model>/*.json
-    Each JSON contains:
-      - performance: float (aggregate)
-      - model_name: str
-      - dataset_name: str
-      - records: list of dicts with index, instance_id, origin_query, etc.
-
-    Strategy:
-    1. Group records by (dataset, split, query_id)
-    2. Build wide table: one row per query, columns per model with scores
-    3. Use wide_to_tables to convert to unified schema
-    """
+    """Adaptador de LLMRouterBench (records por instancia)."""
 
     def load(self, path: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         root = Path(path)
         if not root.exists():
             raise FileNotFoundError(f"LLMRouterBench root not found: {root}")
-
-        # Find all JSON files
-        json_files = list(root.rglob("*.json"))
+        json_files = sorted(root.rglob("*.json"))
         if not json_files:
             raise FileNotFoundError(f"No JSON files found in {root}")
-
         print(f"Processing {len(json_files)} JSON files...")
 
-        # First pass: collect all records grouped by query
-        # query_key = (dataset, split, instance_id)
-        # For each query, collect scores from different models
-        queries_data: dict[tuple, dict] = {}
-        model_scores: dict[tuple, dict[str, float]] = {}
-
+        queries: dict[str, dict] = {}
+        prompts: dict[str, set[str]] = {}
+        rows: list[dict] = []
         for i, json_file in enumerate(json_files):
             if (i + 1) % 100 == 0:
                 print(f"  Read {i + 1}/{len(json_files)} files...")
-
             try:
                 with open(json_file) as fh:
                     data = json.load(fh)
@@ -54,75 +57,110 @@ class LLMRouterBenchAdapter:
                 print(f"  Warning: could not read {json_file}: {e}")
                 continue
 
-            model_name = data.get("model_name", "unknown")
-            dataset_name = data.get("dataset_name", "unknown")
+            model = data.get("model_name", "unknown")
+            dataset = data.get("dataset_name", "unknown")
             split = data.get("split", "unknown")
-            records = data.get("records", [])
-
-            for rec in records:
-                instance_id = rec.get("instance_id") or rec.get("index", 0)
-                query_key = (dataset_name, split, instance_id)
-
-                # Get prompt
-                prompt = rec.get("origin_query") or rec.get("query") or ""
-
-                if query_key not in queries_data:
-                    queries_data[query_key] = {
-                        "query_id": f"{dataset_name}/{split}/{instance_id}",
-                        "text": prompt,
-                        "domain": f"{dataset_name}/{split}",
-                        "answer": "",
+            aggregate = _num(data.get("performance"))
+            for rec in data.get("records", []):
+                rid = rec.get("instance_id") if rec.get("instance_id") not in (None, "") else rec.get("index")
+                qid = f"{dataset}/{split}/{rid}"
+                prompt = str(rec.get("prompt") or "")
+                if qid not in queries:
+                    queries[qid] = {
+                        "query_id": qid,
+                        "text": str(rec.get("origin_query") or rec.get("prompt") or ""),
+                        "domain": f"{dataset}/{split}",
+                        "answer": "" if rec.get("ground_truth") is None else str(rec.get("ground_truth")),
+                        "prompt": prompt,
                     }
-                    model_scores[query_key] = {}
+                    prompts[qid] = set()
+                prompts[qid].add(prompt)
 
-                # Get score for this model
-                score = rec.get("correct") or rec.get("performance") or data.get("performance")
-                if score is not None:
-                    model_scores[query_key][model_name] = float(score)
-
-        if not queries_data:
+                score = _num(rec.get("score"))
+                per_record = not np.isnan(score)
+                rows.append(
+                    {
+                        "query_id": qid,
+                        "config_id": model,
+                        "response_text": (
+                            "" if rec.get("prediction") is None else str(rec.get("prediction"))
+                        )[:RESPONSE_TEXT_MAX],
+                        "in_tokens": _num(rec.get("prompt_tokens")),
+                        "out_tokens": _num(rec.get("completion_tokens")),
+                        "correct": score if per_record else aggregate,
+                        "label_source": "per_record" if per_record else "aggregate_fallback",
+                        "cost_usd": _num(rec.get("cost")),
+                    }
+                )
+        if not rows:
             raise ValueError("No records found in LLMRouterBench data")
 
-        print(f"  Found {len(queries_data)} unique queries")
-        print(f"  Found {len(set(m for scores in model_scores.values() for m in scores.keys()))} models")
+        q = pd.DataFrame(list(queries.values()))
+        q["prompt_variant_count"] = q["query_id"].map(lambda k: len(prompts[k]))
+        q["category"] = q["domain"]
+        q["source_dataset"] = SOURCE
+        q["eval_only"] = False
+        q["language"] = "en"
+        q = q[
+            [
+                "query_id",
+                "text",
+                "domain",
+                "source_dataset",
+                "eval_only",
+                "answer",
+                "category",
+                "language",
+                "prompt",
+                "prompt_variant_count",
+            ]
+        ]
 
-        # Build wide DataFrame
-        rows = []
-        for (dataset_name, split, instance_id), qdata in queries_data.items():
-            row = {
-                "query_id": qdata["query_id"],
-                "prompt": qdata["text"],
-                "domain": qdata["domain"],
-                "answer": qdata["answer"],
+        r = pd.DataFrame(rows)
+        for col in ("in_tokens", "out_tokens"):
+            r.loc[r[col] < 0, col] = np.nan  # contadores negativos publicados → ausentes
+        r["run_id"] = "legacy"
+        r["snapshot_id"] = "legacy"
+        r["reasoning_tokens"] = 0
+        r["latency_s"] = np.nan
+        r["finish_reason"] = ""
+        r["timestamp"] = ""
+        r = r[
+            [
+                "query_id",
+                "config_id",
+                "run_id",
+                "snapshot_id",
+                "response_text",
+                "in_tokens",
+                "out_tokens",
+                "reasoning_tokens",
+                "latency_s",
+                "correct",
+                "label_source",
+                "finish_reason",
+                "timestamp",
+                "cost_usd",
+            ]
+        ]
+
+        models = sorted(r["config_id"].unique())
+        c = pd.DataFrame(
+            {
+                "config_id": models,
+                "model": models,
+                "revision": "",
+                "effort": "default",
+                "budget": np.nan,
+                "price_in": 0.0,
+                "price_out": 0.0,
+                "price_source": f"{SOURCE} (coste final por respuesta en cost_usd)",
+                "price_date": "",
+                "hardware": "",
             }
-            # Add score columns for all models
-            scores = model_scores[(dataset_name, split, instance_id)]
-            for model_name in scores:
-                row[model_name] = scores[model_name]
-            rows.append(row)
-
-        df = pd.DataFrame(rows)
-
-        # Find all model columns
-        model_cols = [col for col in df.columns if col not in ["query_id", "prompt", "domain", "answer"]]
-
-        if not model_cols:
-            raise ValueError("No model columns found in LLMRouterBench data")
-
-        print(f"  Model columns: {model_cols[:10]}{'...' if len(model_cols) > 10 else ''}")
-
-        # Convert to unified tables
-        queries, configs, responses = wide_to_tables(
-            df,
-            prompt_col="prompt",
-            perf_cols=model_cols,
-            id_col="query_id",
-            domain_col="domain",
-            source_name="llmrouterbench",
-            answer_col="answer",
         )
-
-        return queries, configs, responses
+        print(f"  Found {len(q)} unique queries, {len(models)} models, {len(r)} responses")
+        return q, c, r
 
 
 def _run(path: str | None) -> None:

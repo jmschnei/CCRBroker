@@ -19,91 +19,6 @@ def estimate(n_queries, n_cfgs, avg_in, avg_out, decode_tps, prefill_tps, n_gpus
     return dict(instances=inst, gpu_hours=gh, usd=gh * usd_gpu_h)
 
 
-def main():
-    """Entrypoint para la estimación estándar."""
-    import sys
-
-    if "--agent" in sys.argv:
-        # Agent route estimation logic from the script
-        ap2 = argparse.ArgumentParser()
-        ap2.add_argument("--agent", action="store_true")
-        for k, v in dict(
-            n_tasks=200,
-            n_models=3,
-            avg_steps=15,
-            avg_ctx=6000,
-            avg_new_per_step=600,
-            avg_out=250,
-            n_cf_tasks=100,
-            cf_samples=3,
-        ).items():
-            ap2.add_argument(f"--{k}", type=int, default=v)
-        ap2.add_argument("--decode_tps", type=float, default=2500)
-        ap2.add_argument("--prefill_tps", type=float, default=20000)
-        ap2.add_argument("--cf_mode", default="local")
-        ap2.add_argument("--usd_gpu_h", type=float, default=1.8)
-        b = ap2.parse_args()
-        r = estimate_agent_budget(
-            b.n_tasks,
-            b.n_models,
-            b.avg_steps,
-            b.avg_ctx,
-            b.avg_new_per_step,
-            b.avg_out,
-            b.decode_tps,
-            b.prefill_tps,
-            usd_gpu_h=b.usd_gpu_h,
-            n_cf_tasks=b.n_cf_tasks,
-            cf_samples=b.cf_samples,
-            cf_mode=b.cf_mode,
-        )
-        for k, v in r.items():
-            print(f"{k}: {v['pasos']:,} pasos ≈ {v['gpu_horas']:,.1f} GPU-h ≈ {v['usd']:,.0f} USD")
-    else:
-        # Standard budget estimation logic from the script
-        ap = argparse.ArgumentParser()
-        ap.add_argument("--n_queries", type=int, default=20000)
-        ap.add_argument("--n_cfgs", type=int, default=60)
-        ap.add_argument("--avg_in", type=int, default=400)
-        ap.add_argument("--avg_out", type=int, default=600)
-        ap.add_argument("--decode_tps", type=float, default=2500)
-        ap.add_argument("--prefill_tps", type=float, default=20000)
-        ap.add_argument("--n_gpus", type=int, default=1)
-        ap.add_argument("--usd_gpu_h", type=float, default=1.8)
-        a = ap.parse_args()
-        r = estimate(
-            a.n_queries, a.n_cfgs, a.avg_in, a.avg_out, a.decode_tps, a.prefill_tps, a.n_gpus, a.usd_gpu_h
-        )
-        print(
-            f"Instancias: {r['instances']:,}  |  GPU-horas ≈ {r['gpu_hours']:,.0f}  |  USD ≈ {r['usd']:,.0f}"
-        )
-        anchor = r["instances"] * ANCHOR_S_PER_INSTANCE_A800 / 3600
-        print(
-            f"Ancla empírica LLMRouterBench (15.7 s A800/instancia): {anchor:,.0f} GPU-horas (cota alta: modelos de razonamiento largo)"
-        )
-
-
-if __name__ == "__main__" and "--agent" not in __import__("sys").argv:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n_queries", type=int, default=20000)
-    ap.add_argument("--n_cfgs", type=int, default=60)
-    ap.add_argument("--avg_in", type=int, default=400)
-    ap.add_argument("--avg_out", type=int, default=600)
-    ap.add_argument("--decode_tps", type=float, default=2500)
-    ap.add_argument("--prefill_tps", type=float, default=20000)
-    ap.add_argument("--n_gpus", type=int, default=1)
-    ap.add_argument("--usd_gpu_h", type=float, default=1.8)
-    a = ap.parse_args()
-    r = estimate(
-        a.n_queries, a.n_cfgs, a.avg_in, a.avg_out, a.decode_tps, a.prefill_tps, a.n_gpus, a.usd_gpu_h
-    )
-    print(f"Instancias: {r['instances']:,}  |  GPU-horas ≈ {r['gpu_hours']:,.0f}  |  USD ≈ {r['usd']:,.0f}")
-    anchor = r["instances"] * ANCHOR_S_PER_INSTANCE_A800 / 3600
-    print(
-        f"Ancla empírica LLMRouterBench (15.7 s A800/instancia): {anchor:,.0f} GPU-horas (cota alta: modelos de razonamiento largo)"
-    )
-
-
 def estimate_agent_budget(
     n_tasks,
     n_models,
@@ -149,9 +64,31 @@ def estimate_agent_budget(
     return out
 
 
-if __name__ == "__main__" and "--agent" in __import__("sys").argv:
-    ap2 = argparse.ArgumentParser()
-    ap2.add_argument("--agent", action="store_true")
+def _flag(ap: argparse.ArgumentParser, name: str, *aliases: str, **kw) -> None:
+    """Registra --nombre-con-guiones y sus alias (--nombre_con_guiones bajos, abreviaturas antiguas)."""
+    dash = "--" + name.replace("_", "-")
+    under = "--" + name
+    names = [dash] + ([under] if under != dash else []) + [f"--{a}" for a in aliases]
+    ap.add_argument(*names, dest=name, **kw)
+
+
+def _parser_standard() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description="Estimación de GPU-horas para generar datasets de routing.")
+    _flag(ap, "n_queries", "n", type=int, default=20000)
+    _flag(ap, "n_configs", "n_cfgs", type=int, default=60)
+    _flag(ap, "avg_in", type=int, default=400)
+    _flag(ap, "avg_out", type=int, default=600)
+    _flag(ap, "decode_tps", type=float, default=2500)
+    _flag(ap, "prefill_tps", type=float, default=20000)
+    _flag(ap, "n_gpus", type=int, default=1)
+    _flag(ap, "usd_gpu_h", "usd-gpu-hour", "usd_gpu_hour", type=float, default=1.8)
+    _flag(ap, "utilization", "util", type=float, default=0.6)
+    return ap
+
+
+def _parser_agent() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description="Estimación de GPU-horas para AgentRoute (Fase 4).")
+    ap.add_argument("--agent", action="store_true")
     for k, v in dict(
         n_tasks=200,
         n_models=3,
@@ -162,28 +99,59 @@ if __name__ == "__main__" and "--agent" in __import__("sys").argv:
         n_cf_tasks=100,
         cf_samples=3,
     ).items():
-        ap2.add_argument(f"--{k}", type=int, default=v)
-    ap2.add_argument("--decode_tps", type=float, default=2500)
-    ap2.add_argument("--prefill_tps", type=float, default=20000)
-    ap2.add_argument("--cf_mode", default="local")
-    ap2.add_argument("--usd_gpu_h", type=float, default=1.8)
-    b = ap2.parse_args()
-    r = estimate_agent_budget(
-        b.n_tasks,
-        b.n_models,
-        b.avg_steps,
-        b.avg_ctx,
-        b.avg_new_per_step,
-        b.avg_out,
-        b.decode_tps,
-        b.prefill_tps,
-        usd_gpu_h=b.usd_gpu_h,
-        n_cf_tasks=b.n_cf_tasks,
-        cf_samples=b.cf_samples,
-        cf_mode=b.cf_mode,
+        _flag(ap, k, type=int, default=v)
+    _flag(ap, "decode_tps", type=float, default=2500)
+    _flag(ap, "prefill_tps", type=float, default=20000)
+    _flag(ap, "cf_mode", default="local", choices=("local", "rollout"))
+    _flag(ap, "usd_gpu_h", "usd-gpu-hour", "usd_gpu_hour", type=float, default=1.8)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI. Flags con guiones (--n-queries, --n-configs, ...); se aceptan los nombres con guion
+    bajo y los alias antiguos (--n, --n_cfgs). Con --agent estima AgentRoute."""
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--agent" in argv:
+        b = _parser_agent().parse_args(argv)
+        r = estimate_agent_budget(
+            b.n_tasks,
+            b.n_models,
+            b.avg_steps,
+            b.avg_ctx,
+            b.avg_new_per_step,
+            b.avg_out,
+            b.decode_tps,
+            b.prefill_tps,
+            usd_gpu_h=b.usd_gpu_h,
+            n_cf_tasks=b.n_cf_tasks,
+            cf_samples=b.cf_samples,
+            cf_mode=b.cf_mode,
+        )
+        for k, v in r.items():
+            print(f"{k}: {v['pasos']:,} pasos ≈ {v['gpu_horas']:,.1f} GPU-h ≈ {v['usd']:,.0f} USD")
+        return
+
+    a = _parser_standard().parse_args(argv)
+    r = estimate(
+        a.n_queries,
+        a.n_configs,
+        a.avg_in,
+        a.avg_out,
+        a.decode_tps,
+        a.prefill_tps,
+        a.n_gpus,
+        a.usd_gpu_h,
+        util=a.utilization,
     )
-    for k, v in r.items():
-        print(f"{k}: {v['pasos']:,} pasos ≈ {v['gpu_horas']:,.1f} GPU-h ≈ {v['usd']:,.0f} USD")
+    print(f"Instancias: {r['instances']:,}  |  GPU-horas ≈ {r['gpu_hours']:,.0f}  |  USD ≈ {r['usd']:,.0f}")
+    anchor = r["instances"] * ANCHOR_S_PER_INSTANCE_A800 / 3600
+    print(
+        f"Ancla empírica LLMRouterBench (15.7 s A800/instancia): {anchor:,.0f} GPU-horas "
+        "(cota alta: modelos de razonamiento largo)"
+    )
+
 
 if __name__ == "__main__":
     main()
