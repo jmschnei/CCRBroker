@@ -42,6 +42,9 @@ help:
 	@echo "  make phase1      - regenera el unificado con RouterBench/SPROUT/LLMRouterBench"
 	@echo "  make phase1-audit - audita pool oficial, 15 datasets, labels y cobertura"
 	@echo "  make phase1-eval - ejecuta routers × 5 semillas en los 15 datasets"
+	@echo "  make phase1-arena-setup - clona RouterArena oficial (commit fijado) y prepara sub_10"
+	@echo "  make phase1-arena-generate - respuestas del pool a sub_10 (GPU; BACKEND=vllm|openai|mock)"
+	@echo "  make phase1-arena-candidates - evalúa cada candidato con el evaluador oficial"
 	@echo "  make phase2..5   - aún no tienen CLI ejecutable (son APIs/prototipos)"
 	@echo "  make run         - ejecuta la fase seleccionada (PHASE=1 disponible)"
 	@echo "  make clean       - borra artefactos locales (outputs/, .venv/)"
@@ -112,6 +115,18 @@ phase1: venv
 .PHONY: phase1-eval
 phase1-eval: venv
 	@$(PY) scripts/run_phase1_multidataset.py
+
+BACKEND ?= vllm
+
+.PHONY: phase1-arena-setup phase1-arena-generate phase1-arena-candidates
+phase1-arena-setup: venv
+	@$(PY) scripts/run_routerarena.py setup
+
+phase1-arena-generate: venv
+	@$(PY) scripts/run_routerarena.py generate --backend $(BACKEND)
+
+phase1-arena-candidates: venv
+	@$(PY) scripts/run_routerarena.py candidates --backend $(BACKEND)
 
 .PHONY: phase1-audit
 phase1-audit: venv

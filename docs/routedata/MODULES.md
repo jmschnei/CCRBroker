@@ -21,7 +21,7 @@ agentes de routing y utilidades de infraestructura.
 | [`stats.py`](stats.md) | Pruebas estadísticas (bootstrap, McNemar...) | — | 6 |
 | [`validate.py`](validate.md) | Validación estructural y semántica de datos | 1 | 8 |
 | [`drift.py`](drift.md) | Detección y cuantificación de deriva temporal | 4 | 9 |
-| [`agent.py`](agent.md) | Utilidades para agentes multi-turno | 2 | 8 |
+| [`agent_routing.py`](agent_routing.md) | Utilidades para agentes multi-turno | 2 | 8 |
 
 ## Submódulos
 

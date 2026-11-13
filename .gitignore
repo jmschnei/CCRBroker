@@ -31,3 +31,6 @@ data/
 
 # Documentos generados (se regeneran desde el .md)
 RUNBOOK_COMPLETE.pdf
+
+# Checkouts externos (RouterArena oficial: python scripts/run_routerarena.py setup)
+external/

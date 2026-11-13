@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 
-from routedata import agent as A
+from routedata import agent_routing as A
 from routedata.schema import load_table
 
 from . import agentroute as AG

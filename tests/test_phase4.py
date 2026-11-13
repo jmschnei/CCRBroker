@@ -14,7 +14,7 @@ from generate import agentroute as AG
 from generate import run_phase4 as P4
 from generate.backends import GenRequest, MockBackend, OpenAICompatBackend
 from generate.envs import get_env_factory
-from routedata import agent as A
+from routedata import agent_routing as A
 from routedata.schema import save_table
 
 
