@@ -28,3 +28,6 @@ data/
 *.npy
 *.parquet
 *.arrow
+
+# Documentos generados (se regeneran desde el .md)
+RUNBOOK_COMPLETE.pdf

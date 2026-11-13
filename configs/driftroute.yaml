@@ -1,7 +1,17 @@
+# DriftRoute (Fase 3). Rejilla REDUCIDA y estable: no la cambies entre snapshots (salvo por eventos del pool).
 subset_queries: 3000
-cadence: monthly            # re-ejecución sobre la misma muestra
+verifiable_only: true          # true = no depende del juez de la Fase 2 (recomendado para empezar)
+test_frac: 0.5                 # partición fija por cluster; los lotes nuevos van solo a test
+seed: 0
+cadence: monthly
 n_snapshots: 8
-planned_events:             # ajusta a lo que ocurra realmente; registra cada cambio en el manifiesto
+grid:
+  efforts: [nothink, think_mid]          # think_mid solo para modelos con thinking=true
+  budgets_tokens: [500, null]            # se cruza solo con nothink (ver build_config_grid)
+generation: {temperature: 0.2, top_p: 1.0, seed: 0}
+fractions: [0.0, 0.005, 0.01, 0.02, 0.05, 0.2, 1.0]    # tráfico de calibración (E4)
+h4: {min_rel_loss: 0.10, recovery_target: 0.80, max_traffic: 0.01}
+planned_events:             # orientativo; registra los reales con `new-pool`
   - {snapshot: 2, type: add_model,   note: "nuevo modelo abierto relevante"}
   - {snapshot: 3, type: price_change, factor: 0.5, note: "bajada de precio de GPU/proveedor"}
   - {snapshot: 4, type: new_revision, note: "nueva revisión de un modelo del pool"}

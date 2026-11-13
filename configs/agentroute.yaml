@@ -1,5 +1,15 @@
-envs: [tau2-bench, scienceworld, swe-bench-verified-subset, hotpotqa-multihop]
-max_trajectories_counterfactual: 2000
-mixed_policies: [fixed_each_model, switch_every_k(2,4,8), random]
-log_switch_prefill: true
-user_simulator: "modelo local fijo (declararlo: afecta a la reproducibilidad)"
+# AgentRoute (Fase 4). Modelos de MÁS BARATO a MÁS CARO. 3 son suficientes para empezar.
+env: synthetic                  # synthetic (ensayo) | scienceworld | hotpot | tau2 | swebench  (los reales son PLANTILLAS)
+env_kw: {}
+n_tasks: 200                    # empieza con 50 para los pre-chequeos
+test_frac: 0.4                  # partición por TAREA
+max_steps: 30                   # tope de pasos por episodio (documenta cómo cuenta un episodio truncado)
+models: [small, mid, big]
+router:
+  cache_mode: prefix            # debe coincidir con el despliegue (vLLM con caché de prefijos)
+  retention: keep
+  lams: [10, 30, 100, 300, 1000]
+stepdata: {mode: local, n_samples: 3, eps: 0.4, reference_model: big}   # mode=rollout: caro (ver runbook)
+policies_collected: [fixed, mixed]
+workers: 8                      # episodios concurrentes contra los servidores
+gates: {min_deterministic: 0.95, min_valid_action_rate: 0.8, min_headroom_cost_ratio: 0.8}

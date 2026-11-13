@@ -1,14 +1,27 @@
 # Makefile de routing_data_kit
-# Uso tipico: make install && make test && make run-phase2
+# Uso típico: make install && make test && make phase1
 
 PYTHON ?= python
 VENV   ?= .venv
 PY     ?= $(VENV)/bin/python
 PIP    ?= $(PY) -m pip
-PHASE  ?= 2          # fase por defecto (1..5)
+PHASE  ?= 1          # fase de ingestión disponible (1..5)
 OUT    ?= outputs
-N      ?= 200        # n de muestras por celda
-WARMUP ?= 5          # warmup de vLLM por modelo
+N_QUERIES ?= 20000
+N_CFGS    ?= 60
+AVG_IN    ?= 400
+AVG_OUT   ?= 600
+DECODE_TPS ?= 2500
+PREFILL_TPS ?= 20000
+N_GPUS     ?= 1
+USD_GPU_H  ?= 1.8
+UTIL       ?= 0.6
+MODEL      ?= Qwen/Qwen3-0.6B
+REQUESTS   ?= 64
+BATCH_SIZE ?= 8
+WARMUP     ?= 8
+GPU_USD_H  ?=
+GPU_PRICE_SOURCE ?=
 
 .DEFAULT_GOAL := help
 
@@ -16,18 +29,21 @@ WARMUP ?= 5          # warmup de vLLM por modelo
 help:
 	@echo "Comandos disponibles:"
 	@echo "  make venv        - crea .venv si no existe"
-	@echo "  make install     - instala dependencias base (+ --extra vllm para GPU)"
+	@echo "  make install     - instala paquete + dependencias de desarrollo/pruebas"
+	@echo "  make install-gpu - instala desarrollo, evaluación y vLLM"
 	@echo "  make test        - pytest"
+	@echo "  make validate    - valida la estructura de data/raw/"
+	@echo "  make validate-unified - valida manifiesto, filas y claves del dataset procesado"
 	@echo "  make lint        - ruff check"
 	@echo "  make format      - ruff format"
 	@echo "  make typecheck   - mypy"
 	@echo "  make budget      - estima GPU-horas (estimate_budget.py)"
-	@echo "  make phase1      - reutiliza datasets publicos (LLMRouterBench/...)"
-	@echo "  make phase2      - ConfigRoute"
-	@echo "  make phase3      - DriftRoute"
-	@echo "  make phase4      - AgentRoute"
-	@echo "  make phase5      - AdvRoute"
-	@echo "  make run         - genera la fase $(PHASE)  (override: PHASE=3 make run)"
+	@echo "  make phase0-measure MODEL=... GPU_USD_H=... GPU_PRICE_SOURCE=... - mide tok/s (Linux/NVIDIA CUDA)"
+	@echo "  make phase1      - regenera el unificado con RouterBench/SPROUT/LLMRouterBench"
+	@echo "  make phase1-audit - audita pool oficial, 15 datasets, labels y cobertura"
+	@echo "  make phase1-eval - ejecuta routers × 5 semillas en los 15 datasets"
+	@echo "  make phase2..5   - aún no tienen CLI ejecutable (son APIs/prototipos)"
+	@echo "  make run         - ejecuta la fase seleccionada (PHASE=1 disponible)"
 	@echo "  make clean       - borra artefactos locales (outputs/, .venv/)"
 	@echo "  make distclean   - clean + pycache"
 
@@ -38,71 +54,100 @@ venv:
 .PHONY: install
 install: venv
 	@$(PIP) install -U pip wheel
-	@$(PIP) install -e .
-	@echo "Dependencias instaladas."
+	@$(PIP) install -e '.[dev]'
+	@echo "Paquete y dependencias de desarrollo instalados."
 	@echo "Para GPU:  $(PIP) install -e '.[vllm]'"
 	@echo "Para eval: $(PIP) install -e '.[eval]'"
 
 .PHONY: install-gpu
 install-gpu: venv
-	@$(PIP) install -e '.[vllm,eval]'
+	@$(PIP) install -e '.[dev,vllm,eval]'
 
 .PHONY: test
 test: venv
 	@$(PY) -m pytest tests/ -v
 
+.PHONY: validate
+validate: venv
+	@$(PY) -m routedata.validate
+
+.PHONY: validate-unified
+validate-unified: venv
+	@$(PY) -m routedata.validate --unified
+
 .PHONY: lint
 lint: venv
 	@$(PIP) install -q 'ruff>=0.4,<1.0' 2>/dev/null || true
-	@$(PY) -m ruff check routedata generate tests estimate_budget.py
+	@$(PY) -m ruff check routedata generate scripts tests estimate_budget.py
 
 .PHONY: format
 format: venv
 	@$(PIP) install -q 'ruff>=0.4,<1.0' 2>/dev/null || true
-	@$(PY) -m ruff format routedata generate tests estimate_budget.py
-	@$(PY) -m ruff check --fix routedata generate tests estimate_budget.py
+	@$(PY) -m ruff format routedata generate scripts tests estimate_budget.py
+	@$(PY) -m ruff check --fix routedata generate scripts tests estimate_budget.py
 
 .PHONY: typecheck
 typecheck: venv
 	@$(PIP) install -q 'mypy>=1.8,<2.0' 2>/dev/null || true
-	@$(PY) -m mypy routedata generate
+	@$(PY) -m mypy routedata generate scripts
 
 .PHONY: budget
 budget: venv
-	@$(PY) estimate_budget.py --n $(N) --warmup $(WARMUP)
+	@$(PY) -m estimate_budget --n-queries $(N_QUERIES) --n-configs $(N_CFGS) \
+		--avg-in $(AVG_IN) --avg-out $(AVG_OUT) --decode-tps $(DECODE_TPS) \
+		--prefill-tps $(PREFILL_TPS) --n-gpus $(N_GPUS) --usd-gpu-hour $(USD_GPU_H) \
+		--utilization $(UTIL)
+
+.PHONY: phase0-measure
+phase0-measure: venv
+	@$(PY) scripts/benchmark_vllm.py --model "$(MODEL)" --requests $(REQUESTS) \
+		--batch-size $(BATCH_SIZE) --warmup $(WARMUP) --gpu-usd-hour "$(GPU_USD_H)" \
+		--gpu-price-source "$(GPU_PRICE_SOURCE)"
 
 # ---- Fases ------------------------------------------------------------------
 .PHONY: phase1
 phase1: venv
-	@echo "Fase 1: reutilizacion de LLMRouterBench / RouterBench / SPROUT / RouterArena"
-	@$(PY) -c "from routedata.adapters import LLMRouterBench, RouterBench, SPROUT, RouterArena; \
-print('LLMRouterBench ok, n =', LLMRouterBench().load().n); \
-print('RouterBench  ok, n =', RouterBench().load().n); \
-print('RouterArena  ok, n =', RouterArena().load().n)"
+	@$(PY) regenerate_combined.py
+
+.PHONY: phase1-eval
+phase1-eval: venv
+	@$(PY) scripts/run_phase1_multidataset.py
+
+.PHONY: phase1-audit
+phase1-audit: venv
+	@$(PY) scripts/run_phase1_multidataset.py --audit-only
 
 .PHONY: phase2
 phase2: venv
-	@$(PY) -m generate.configroute --n $(N) --out $(OUT)
+	@echo "ConfigRoute no tiene CLI autónoma: requiere queries, configs y backend_factory." >&2
+	@echo "Use generate.configroute.run(...) desde un experimento configurado." >&2
+	@exit 2
 
 .PHONY: phase3
 phase3: venv
-	@$(PY) -m generate.driftroute --n $(N) --out $(OUT)
+	@echo "DriftRoute contiene funciones de comparación/replay, pero no un CLI de generación." >&2
+	@exit 2
 
 .PHONY: phase4
 phase4: venv
-	@$(PY) -m generate.agentroute --n $(N) --out $(OUT)
+	@echo "AgentRoute requiere adaptadores Env y backends; todavía no tiene CLI autónoma." >&2
+	@exit 2
 
 .PHONY: phase5
 phase5: venv
-	@$(PY) -m generate.advroute --n $(N) --out $(OUT)
+	@echo "AdvRoute contiene utilidades de evaluación; todavía no tiene CLI autónoma." >&2
+	@exit 2
 
 .PHONY: run
 run: venv
-	@$(PY) -c "import generate; \
-import importlib; \
-mod = importlib.import_module(generate.PHASES[$(PHASE)].module); \
-mod.run(n=$(N), out='$(OUT)')" 2>&1 || \
-$(PY) -m generate.configroute --n $(N) --out $(OUT)
+	@case "$(PHASE)" in \
+		1) $(MAKE) phase1 ;; \
+		2) $(MAKE) phase2 ;; \
+		3) $(MAKE) phase3 ;; \
+		4) $(MAKE) phase4 ;; \
+		5) $(MAKE) phase5 ;; \
+		*) echo "PHASE debe ser un entero entre 1 y 5" >&2; exit 2 ;; \
+	esac
 
 # ---- Limpieza ----------------------------------------------------------------
 .PHONY: clean

@@ -10,8 +10,11 @@ conformal risk control (Angelopoulos et al., 2022) da E[L(t̂)] ≤ α bajo inte
 Nota: la monotonía de L en t NO está garantizada para cualquier predictor; se comprueba
 empíricamente (`monotonicity_violation`) y debe reportarse (ver E7).
 """
+
 from __future__ import annotations
+
 import numpy as np
+
 
 def choose(Phat, cost_order, t):
     """Elecciones para umbral t. Phat[n,k]; cost_order: índices de configs de barata a cara."""
@@ -21,23 +24,28 @@ def choose(Phat, cost_order, t):
     ch = np.where(has, np.asarray(cost_order)[first], np.argmax(Phat, axis=1))
     return ch
 
+
 def risk_at(Q, Phat, cost_order, t):
     ch = choose(Phat, cost_order, t)
     return float(np.mean(1 - Q[np.arange(len(ch)), ch]))
 
+
 def crc_threshold(Q_cal, Phat_cal, cost_order, alpha: float, grid=None):
     """Umbral CRC más bajo (= más barato) que cumple el límite de riesgo. None si no existe."""
-    n = len(Q_cal); grid = np.linspace(0, 1, 201) if grid is None else grid
+    n = len(Q_cal)
+    grid = np.linspace(0, 1, 201) if grid is None else grid
     for t in grid:
         if n / (n + 1) * risk_at(Q_cal, Phat_cal, cost_order, t) + 1 / (n + 1) <= alpha:
             return float(t)
     return None
+
 
 def monotonicity_violation(Q, Phat, cost_order, grid=None):
     """Mayor subida de riesgo al aumentar t (0 = perfectamente monótona)."""
     grid = np.linspace(0, 1, 201) if grid is None else grid
     r = np.array([risk_at(Q, Phat, cost_order, t) for t in grid])
     return float(np.max(np.maximum(np.diff(r), 0))) if len(r) > 1 else 0.0
+
 
 def stratified_crc(Q_cal, Phat_cal, strata_cal, cost_order, alpha, grid=None):
     """Un umbral por estrato (dominio/dificultad). Estratos con n pequeño caen al global."""
@@ -49,10 +57,12 @@ def stratified_crc(Q_cal, Phat_cal, strata_cal, cost_order, alpha, grid=None):
         out[s] = t if t is not None else glob
     return out, glob
 
+
 def apply_stratified(Phat, strata, thresholds, cost_order, fallback):
     ch = np.zeros(len(Phat), int)
     for s in np.unique(strata):
-        m = strata == s; t = thresholds.get(s, fallback)
+        m = strata == s
+        t = thresholds.get(s, fallback)
         t = 1.0 if t is None else t  # sin umbral válido: escalar siempre
         ch[m] = choose(Phat[m], cost_order, t)
     return ch

@@ -1,2 +1,3 @@
-"""routedata: utilidades para construir y evaluar datasets de LLM routing."""
-__version__ = "0.1.0"
+from .adapters.base import EvalOnlyError, assert_trainable, wide_to_tables
+
+__all__ = ["EvalOnlyError", "assert_trainable", "wide_to_tables"]

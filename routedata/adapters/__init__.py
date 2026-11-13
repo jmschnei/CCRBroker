@@ -1,1 +1,3 @@
-from .base import wide_to_tables, assert_trainable, EvalOnlyError
+from .base import EvalOnlyError, assert_trainable, wide_to_tables
+
+__all__ = ["EvalOnlyError", "assert_trainable", "wide_to_tables"]

@@ -1,0 +1,11 @@
+# Piloto de ConfigRoute: ~1 000 consultas para calibrar coste y verificar el pipeline.
+n_pilot: 1000
+n_full_target: 8000          # punto de partida RECOMENDADO (no 20 000) hasta ver el coste real
+sources_quota: {mmlu_pro: 300, math500: 200, gpqa_diamond: 100, humaneval: 100, open_ended: 300}
+efforts: [nothink, think_low, think_mid]      # pilot: sin think_high (el más caro)
+budgets_tokens: [100, 500, null]
+models_pilot: 4              # 1 pequeño, 2 medianos (uno thinking), 1 grande si cabe
+seed: 0
+judge_subsample: 0.2         # en el piloto, juzgar solo el 20 % de las tareas abiertas
+audit_n: 150                 # auditoría humana reducida en piloto; 500 en la escala completa
+gates: {min_compliance: 0.8, min_pearson: 0.8, min_kappa: 0.7}
