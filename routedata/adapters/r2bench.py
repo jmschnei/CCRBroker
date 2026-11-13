@@ -82,7 +82,7 @@ class R2BenchAdapter:
             csv_files = csv_files[: self.limit_files]
 
         # Group by model to apply limit_models
-        models = {}
+        models: dict[str, list] = {}
         for cf in csv_files:
             model = self._extract_model_name(cf, raw_dir)
             if model not in models:

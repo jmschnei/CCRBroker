@@ -284,7 +284,7 @@ class HeuristicAgent(RoutingAgent):
 # Convenience factory
 def create_agent(name: str, config: dict[str, Any] | None = None) -> RoutingAgent:
     """Create a routing agent by name."""
-    agents = {
+    agents: dict[str, type[RoutingAgent]] = {
         "random": RandomAgent,
         "cost": CostAgent,
         "quality": QualityAgent,

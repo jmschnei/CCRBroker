@@ -59,7 +59,8 @@ def _pp(p):
 def billed_prefill(steps, cache_mode: str = "none", retention: str = "keep"):
     """Tokens de prefill facturados por paso. retention='keep': la caché de cada modelo sobrevive a las
     llamadas de otros modelos; 'evict': solo cuenta si el paso anterior fue del mismo modelo."""
-    last, prev, out = {}, None, []
+    last: dict[str, int] = {}
+    prev, out = None, []
     for s in steps:
         L, m = s["in_tokens"], s["model"]
         if cache_mode == "none":

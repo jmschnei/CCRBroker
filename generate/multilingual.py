@@ -54,7 +54,7 @@ def translate_queries(queries: pd.DataFrame, lang: str, gen_fn, back_fn=None, mi
             (not c["numbers_ok"])
             or not (0.4 <= c["length_ratio"] <= 2.5)
             or (bj is not None and bj < min_back_jaccard)
-            or (opts is not None and len(opts_t) != len(opts))
+            or (opts is not None and opts_t is not None and len(opts_t) != len(opts))
         )
         nm = dict(meta, source_query_id=r["query_id"], translated=True, translator_lang=lang)
         out.append(

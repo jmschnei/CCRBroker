@@ -29,6 +29,7 @@ class GenResult:
     reasoning_tokens: int = 0
     finish_reason: str = "stop"  # 'stop' | 'length'
     latency_s: float = 0.0
+    cached_tokens: int | None = None  # usage.prompt_tokens_details (si el servidor lo expone)
 
 
 class Backend(Protocol):

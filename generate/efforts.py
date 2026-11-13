@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from .backends import GenRequest, GenResult
+from .backends import Backend, GenRequest, GenResult
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ EFFORTS = {
 CLOSE_THINK = "\n\nConsidering the limited time, I have to give the solution based on the thinking directly now.\n</think>\n\n"
 
 
-def run_with_effort(backend, reqs: list[GenRequest], spec: EffortSpec) -> list[GenResult]:
+def run_with_effort(backend: Backend, reqs: list[GenRequest], spec: EffortSpec) -> list[GenResult]:
     if not spec.enable_thinking:
         rs = [
             replace(r, enable_thinking=False) for r in reqs

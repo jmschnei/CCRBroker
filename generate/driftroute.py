@@ -20,6 +20,7 @@ import os
 import platform
 import subprocess
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -102,7 +103,7 @@ def apply_events(configs: pd.DataFrame, events: list) -> pd.DataFrame:
 
 def capture_environment() -> dict:
     """Versiones relevantes de la pila de inferencia y GPU (para atribuir deriva a motor/hardware)."""
-    env = {}
+    env: dict[str, Any] = {}
     for pkg in ("vllm", "torch", "transformers", "flash-attn", "xformers"):
         try:
             env[pkg] = _md.version(pkg)

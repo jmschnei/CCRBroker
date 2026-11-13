@@ -62,7 +62,7 @@ def sample_for_human(df, n: int = 500, strata=("domain", "config_id"), seed: int
     rng = np.random.default_rng(seed)
     groups = list(df.groupby(list(strata)).indices.values())
     per = max(1, n // max(1, len(groups)))
-    idx = []
+    idx: list[int] = []
     for g in groups:
         idx.extend(rng.choice(g, size=min(per, len(g)), replace=False))
     return df.iloc[sorted(idx)[:n]]

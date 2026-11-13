@@ -45,8 +45,8 @@ class Pipeline:
         print("Loading SPROUT...")
         print("=" * 60)
         try:
-            adapter = create_sprout_adapter(Path("."))
-            results["sprout"] = adapter.load()
+            sprout = create_sprout_adapter(Path("."))
+            results["sprout"] = sprout.load()
         except Exception as e:
             print(f"  ERROR: {e}")
 
@@ -55,8 +55,8 @@ class Pipeline:
         print("Loading R2-Bench...")
         print("=" * 60)
         try:
-            adapter = R2BenchAdapter(raw_dir=Path("."))
-            results["r2bench"] = adapter.load()
+            r2bench = R2BenchAdapter(raw_dir=Path("."))
+            results["r2bench"] = r2bench.load()
         except Exception as e:
             print(f"  ERROR: {e}")
 
@@ -65,8 +65,8 @@ class Pipeline:
         print("Loading LLMRouterBench...")
         print("=" * 60)
         try:
-            adapter = LLMRouterBenchAdapter()
-            results["llmrouterbench"] = adapter.load(str(self.raw_root / "llmrouterbench"))
+            llmrb = LLMRouterBenchAdapter()
+            results["llmrouterbench"] = llmrb.load(str(self.raw_root / "llmrouterbench"))
         except Exception as e:
             print(f"  ERROR: {e}")
 
