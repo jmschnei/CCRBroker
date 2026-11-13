@@ -127,14 +127,18 @@ Demo ejecutable: `python examples/routing_agents_demo.py`.
 ### Dataset unificado (Fase 1)
 
 Los datasets crudos viven en `data/raw/` (descarga local, fuera de git). El pipeline
-los normaliza a `data/processed/unified/` (parquet: `queries` / `configs` / `responses`
-+ `manifest.json`). Integrados: RouterBench, SPROUT y LLMRouterBench
-(144 452 queries · 75 configs · 2,47 M responses). R2-Bench pendiente (ver
-`PIPELINE_SUMMARY.md`).
+los normaliza a `data/processed/unified/` (Parquet y `manifest.json`). La cifra actual
+de filas debe consultarse en ese manifiesto, que es la fuente de verdad; los resúmenes
+anteriores pueden estar desactualizados. R2-Bench no se incluye en la regeneración
+habitual por su tamaño (ver `PIPELINE_SUMMARY.md`).
 
 ```bash
-python -m routedata.pipeline load        # regenera data/processed/unified/ (incluye intento de R2-Bench)
-python -m routedata.validate             # validación estructural de data/raw/
+make phase1                             # regenera RouterBench, SPROUT y LLMRouterBench
+make phase1-audit                       # verifica pool oficial, cobertura y labels
+make phase1-eval                        # seis routers/baselines × cinco semillas, 15 datasets
+python -m routedata.pipeline load        # pipeline general; también intenta cargar R2-Bench
+make validate                           # validación estructural de data/raw/
+make validate-unified                   # recuentos, manifiesto, IDs y métricas de los Parquet
 python examples/load_unified_dataset.py  # estadísticas + integridad referencial
 python examples/inspect_raw_datasets.py  # resumen de los 4 datasets crudos
 ```
@@ -142,39 +146,56 @@ python examples/inspect_raw_datasets.py  # resumen de los 4 datasets crudos
 ### Reutilizar datasets públicos (Fase 1)
 
 ```python
-from routedata.adapters import LLMRouterBench, RouterBench, SPROUT, RouterArena
-from routedata.baselines import oracle_best, uniform, budget_aware
-from routedata.metrics import gain_at, gap_at, audc, aiq, crc
+from routedata.adapters.llmrouterbench import LLMRouterBenchAdapter
 
-ds = LLMRouterBench().load()          # o RouterBench(), SPROUT(), RouterArena()
-res = gain_at(ds, oracle_best)
-print(res.summary)                    # Gain@b
+queries, configs, responses = LLMRouterBenchAdapter().load()
+print(len(queries), len(configs), len(responses))
 ```
+
+Los adaptadores se importan desde sus módulos concretos; RouterArena es solo para
+evaluación y no debe usarse para entrenar o ajustar el router.
+
+La evaluación local usa los 20 modelos del pool performance-only y las 15 tareas
+de LLMRouterBench, separa por prompt dentro de cada dataset y excluye queries con
+labels `aggregate_fallback`. Los resultados son baselines de este proyecto, no una
+reproducción de métodos publicados. Véanse los JSON de auditoría/resultados en
+`outputs/phase1/` (artefactos locales ignorados por Git).
+
+La tabla unificada es dispersa: contiene solo respuestas observadas. Algunas etiquetas
+de LLMRouterBench son agregadas y están marcadas en `label_source`; respuestas sin score
+quedan como `NaN`. Las fuentes históricas no contienen latencias utilizables.
 
 ### Generar un dataset nuevo (Fases 2–5)
 
-```bash
-# Fase 2: ConfigRoute (nuevos prompts × modelos × esfuerzo)
-python -m generate.configroute --n 200 --out outputs/phase2
-
-# Fase 3: DriftRoute (preferencias que cambian en el tiempo)
-python -m generate.driftroute  --n 200 --out outputs/phase3
-
-# Fase 4: AgentRoute (agentes con coste de cambio)
-python -m generate.agentroute  --n 200 --out outputs/phase4
-
-# Fase 5: AdvRoute (perturbaciones + ataques)
-python -m generate.advroute    --n 200 --out outputs/phase5
-```
-
-Cada generador escribe JSONL por modelo + metadata + presupuesto estimado.
+Los módulos de las fases 2–5 exponen utilidades Python, pero aún no disponen de una
+CLI autónoma que configure datos, modelos y backends. Por ello, `make phase2`–`make phase5`
+informa explícitamente de ese bloqueo en vez de lanzar comandos inexistentes.
+La Fase 1 sí se puede ejecutar con `make phase1` si los datos crudos están disponibles.
 
 ### Estimar presupuesto
 
 ```bash
-python estimate_budget.py --n 200 --warmup 5
-# o: make budget
+python -m estimate_budget --n-queries 200 --n-configs 60
+# También está disponible como comando instalado:
+routing-budget --n-queries 200 --n-configs 60
+# o usar los valores configurables del Makefile:
+make budget N_QUERIES=200 N_CFGS=60
 ```
+
+### Fase 0: medir throughput en una GPU NVIDIA
+
+Las revisiones del pool están fijadas a commits HF. El benchmark requiere Linux con
+NVIDIA/CUDA y vLLM; no ejecuta la medición en macOS/Metal. Instala el extra vLLM en
+el servidor y aporta el precio real por GPU-hora y su fuente:
+
+```bash
+make phase0-measure MODEL=Qwen/Qwen3-0.6B GPU_USD_H=1.80 GPU_PRICE_SOURCE="proveedor y tarifa"
+```
+
+Los resultados se añaden a `outputs/phase0/throughput.jsonl` con revisión, hardware,
+configuración, tokens/s agregados y costes derivados (incluyendo escenarios ±50 %).
+No se deben sustituir los supuestos de hardware/precio del pool hasta verificar esos
+datos. El gate de Fase 0 sigue pendiente hasta guardar al menos una medición real.
 
 ### Métricas disponibles
 

@@ -36,15 +36,7 @@ class Pipeline:
         print("Loading RouterBench...")
         print("=" * 60)
         try:
-            adapter_0shot = load_routerbench(str(self.raw_root / "routerbench" / "routerbench_0shot.pkl"))
-            adapter_5shot = load_routerbench(str(self.raw_root / "routerbench" / "routerbench_5shot.pkl"))
-            # Combine both
-            import pandas as pd
-            results["routerbench"] = (
-                pd.concat([adapter_0shot[0], adapter_5shot[0]], ignore_index=True),
-                pd.concat([adapter_0shot[1], adapter_5shot[1]], ignore_index=True),
-                pd.concat([adapter_0shot[2], adapter_5shot[2]], ignore_index=True),
-            )
+            results["routerbench"] = load_routerbench(str(self.raw_root / "routerbench"))
         except Exception as e:
             print(f"  ERROR: {e}")
 

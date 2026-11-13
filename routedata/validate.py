@@ -16,6 +16,7 @@ Uso:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import pickle
@@ -36,6 +37,7 @@ class ValidationReport:
     valid: bool
     total_files: int = 0
     total_records: int = 0
+    records_sampled: bool = False
     total_models: int = 0
     columns: List[str] = field(default_factory=list)
     expected_columns: List[str] = field(default_factory=list)
@@ -50,6 +52,7 @@ class ValidationReport:
             "valid": self.valid,
             "total_files": self.total_files,
             "total_records": self.total_records,
+            "records_sampled": self.records_sampled,
             "total_models": self.total_models,
             "columns": self.columns,
             "expected_columns": self.expected_columns,
@@ -228,7 +231,7 @@ def validate_llmrouterbench(data_root: Path = DATA_ROOT) -> ValidationReport:
     total_records = 0
     errors_count = 0
 
-    for json_file in json_files[:10]:  # Check first 10 files as sample
+    for json_file in json_files:
         try:
             with open(json_file) as f:
                 data = json.load(f)
@@ -261,7 +264,7 @@ def validate_llmrouterbench(data_root: Path = DATA_ROOT) -> ValidationReport:
             report.errors.append(f"{json_file.name}: {e}")
 
     if errors_count:
-        report.errors.append(f"{errors_count} files with errors (checked first 10)")
+        report.errors.append(f"{errors_count} files with errors")
 
     report.total_records = total_records
     report.total_models = len(models)
@@ -308,6 +311,7 @@ def validate_r2bench(data_root: Path = DATA_ROOT) -> ValidationReport:
         return report
 
     report.total_files = len(csv_files)
+    report.records_sampled = True
 
     models = set()
     total_rows = 0
@@ -400,7 +404,8 @@ def print_summary(reports: Dict[str, ValidationReport]) -> None:
         status = "✅ OK" if report.valid else "❌ FAIL"
         print(f"\n{name.upper():<20} {status}")
         print(f"  Files:     {report.total_files}")
-        print(f"  Records:   {report.total_records}")
+        record_label = "Records sampled" if report.records_sampled else "Records"
+        print(f"  {record_label:<11} {report.total_records}")
         print(f"  Models:    {report.total_models}")
         if report.columns:
             print(f"  Columns:   {', '.join(report.columns[:10])}")
@@ -418,14 +423,153 @@ def print_summary(reports: Dict[str, ValidationReport]) -> None:
     print("\n" + "=" * 70)
 
 
-def main() -> None:
+def validate_unified(data_root: Path = DATA_ROOT) -> dict[str, Any]:
+    """Validate processed unified Parquet tables against their manifest and each other."""
+    import pandas as pd
+
+    unified_dir = data_root if data_root.name == "unified" else data_root / "processed" / "unified"
+    manifest_path = unified_dir / "manifest.json"
+    errors: list[str] = []
+    warnings: list[str] = []
+    if not manifest_path.is_file():
+        return {"valid": False, "errors": [f"Manifest not found: {manifest_path}"], "warnings": []}
+
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        files = manifest["files"]
+        queries = pd.read_parquet(unified_dir / files["queries"], columns=["query_id", "source_dataset"])
+        configs = pd.read_parquet(unified_dir / files["configs"], columns=["config_id", "source_dataset"])
+        responses = pd.read_parquet(
+            unified_dir / files["responses"],
+            columns=[
+                "query_id", "config_id", "run_id", "source_dataset", "correct",
+                "in_tokens", "out_tokens", "latency_s", "cost_usd", "label_source",
+            ],
+        )
+    except (KeyError, OSError, ValueError) as error:
+        return {"valid": False, "errors": [f"Cannot read unified dataset: {error}"], "warnings": []}
+
+    counts = {"queries": len(queries), "configs": len(configs), "responses": len(responses)}
+    manifest_counts = {
+        "queries": manifest.get("total_queries"),
+        "configs": manifest.get("total_configs"),
+        "responses": manifest.get("total_responses"),
+    }
+    for table, actual in counts.items():
+        if manifest_counts[table] != actual:
+            errors.append(f"manifest {table}={manifest_counts[table]}, Parquet rows={actual}")
+
+    for table_name, table, id_column in (
+        ("queries", queries, "query_id"),
+        ("configs", configs, "config_id"),
+    ):
+        missing_ids = int(table[id_column].isna().sum())
+        duplicate_ids = int(table[id_column].duplicated().sum())
+        if missing_ids:
+            errors.append(f"{table_name}: {missing_ids} null {id_column} values")
+        if duplicate_ids:
+            errors.append(f"{table_name}: {duplicate_ids} duplicate {id_column} values")
+
+    query_ids = set(queries["query_id"].dropna())
+    config_ids = set(configs["config_id"].dropna())
+    orphan_queries = int((~responses["query_id"].isin(query_ids)).sum())
+    orphan_configs = int((~responses["config_id"].isin(config_ids)).sum())
+    if orphan_queries:
+        errors.append(f"responses: {orphan_queries} query_id foreign keys not found")
+    if orphan_configs:
+        errors.append(f"responses: {orphan_configs} config_id foreign keys not found")
+
+    duplicate_responses = int(responses.duplicated(["query_id", "config_id", "run_id"]).sum())
+    if duplicate_responses:
+        errors.append(f"responses: {duplicate_responses} duplicate (query_id, config_id, run_id) keys")
+
+    labeled = responses["correct"].dropna()
+    out_of_range = int((~labeled.between(0, 1)).sum())
+    if out_of_range:
+        errors.append(f"responses: {out_of_range} correct values outside [0, 1]")
+    missing_labels = int(responses["correct"].isna().sum())
+    if missing_labels:
+        warnings.append(f"{missing_labels} responses have no correctness label and remain NaN")
+
+    for column in ("in_tokens", "out_tokens"):
+        negatives = int(responses[column].lt(0).sum())
+        if negatives:
+            errors.append(f"responses: {negatives} negative values in {column}")
+    for column in ("latency_s", "cost_usd"):
+        if column in responses:
+            negatives = int(responses[column].lt(0).sum())
+            if negatives:
+                errors.append(f"responses: {negatives} negative values in {column}")
+
+    source_counts = {
+        "queries": queries["source_dataset"].value_counts(dropna=False).to_dict(),
+        "configs": configs["source_dataset"].value_counts(dropna=False).to_dict(),
+        "responses": responses["source_dataset"].value_counts(dropna=False).to_dict(),
+    }
+    actual_datasets = set(queries["source_dataset"].dropna())
+    manifest_datasets = set(manifest.get("datasets", []))
+    if actual_datasets != manifest_datasets:
+        errors.append(
+            f"manifest datasets={sorted(manifest_datasets)}, query sources={sorted(actual_datasets)}"
+        )
+
+    response_query_sources = responses["query_id"].map(queries.drop_duplicates("query_id").set_index("query_id")["source_dataset"])
+    response_config_sources = responses["config_id"].map(configs.drop_duplicates("config_id").set_index("config_id")["source_dataset"])
+    query_source_mismatch = int((response_query_sources.notna() & (response_query_sources != responses["source_dataset"])).sum())
+    config_source_mismatch = int((response_config_sources.notna() & (response_config_sources != responses["source_dataset"])).sum())
+    if query_source_mismatch:
+        errors.append(f"responses: {query_source_mismatch} source_dataset mismatches against queries")
+    if config_source_mismatch:
+        errors.append(f"responses: {config_source_mismatch} source_dataset mismatches against configs")
+
+    if "latency_s" in responses and responses["latency_s"].isna().all():
+        warnings.append("latency_s is absent for all unified responses")
+    missing_token_counts = {
+        column: int(responses[column].isna().sum()) for column in ("in_tokens", "out_tokens")
+    }
+    if any(missing_token_counts.values()):
+        warnings.append(f"missing token counts: {missing_token_counts}")
+
+    return {
+        "valid": not errors,
+        "counts": counts,
+        "manifest_counts": manifest_counts,
+        "source_counts": source_counts,
+        "label_counts": responses["label_source"].value_counts(dropna=False).to_dict(),
+        "missing_token_counts": missing_token_counts,
+        "missing_labels": missing_labels,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    reports = validate_all()
-    print_summary(reports)
+    parser = argparse.ArgumentParser(description="Validate raw datasets or the processed unified tables")
+    parser.add_argument("--data-root", type=Path, default=DATA_ROOT, help="Root data directory")
+    parser.add_argument("--unified", action="store_true", help="Validate processed Parquet tables and manifest")
+    args = parser.parse_args(argv)
 
-    # Exit non-zero if any validation failed
-    if not all(r.valid for r in reports.values()):
+    if args.unified:
+        report = validate_unified(args.data_root)
+        print("\nUNIFIED DATASET", "✅ OK" if report["valid"] else "❌ FAIL")
+        for table, count in report.get("counts", {}).items():
+            print(f"  {table}: {count:,} rows (manifest: {report['manifest_counts'][table]})")
+        for table, counts in report.get("source_counts", {}).items():
+            print(f"  {table} by source: {counts}")
+        print(f"  labels: {report.get('label_counts', {})}")
+        for warning in report["warnings"]:
+            print(f"  WARNING: {warning}")
+        for error in report["errors"]:
+            print(f"  ERROR: {error}")
+        if not report["valid"]:
+            raise SystemExit(1)
+        return
+
+    reports = validate_all(args.data_root)
+    print_summary(reports)
+    if not all(report.valid for report in reports.values()):
         raise SystemExit(1)
 
 

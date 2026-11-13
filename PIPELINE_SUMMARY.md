@@ -1,16 +1,31 @@
 # Pipeline Resumen - routedata
 
-## Estado: ✅ Funcional (3 datasets)
+## Estado: ✅ Regenerado y validado (3 datasets; 2026-11-09)
 
 El pipeline carga y combina 3 de los 4 datasets disponibles:
 
 | Dataset | Queries | Configs | Responses | Estado |
 |---------|---------|---------|-----------|--------|
-| RouterBench | 73,008 | 20 | 803,088 | ✅ |
+| RouterBench | 73,008 | 11 | 803,088 | ✅ (configs únicas entre 0-shot y 5-shot) |
 | SPROUT | 44,241 | 13 | 575,133 | ✅ (esquema corregido) |
-| LLMRouterBench | 27,203 | 40 | 1,088,120 | ✅ |
-| R2-Bench | - | - | - | ⚠️ Timeout (demasiado grande) |
-| **TOTAL** | **144,452** | **75** | **2,466,341** | |
+| LLMRouterBench | 27,203 | 40 | 548,059 | ✅ (solo pares consulta-modelo observados) |
+| R2-Bench | — | — | — | ⚠️ Crudo presente; excluido del unificado actual |
+| **TOTAL** | **144,452** | **64** | **1,926,280** | |
+
+### Calidad y procedencia de labels
+
+- 4,327 labels de LLMRouterBench usan `aggregate_fallback`; no son labels por instancia.
+- 154 respuestas de RouterBench no tienen score y se conservan como `correct=NaN`, no como cero.
+- 13 contadores negativos de tokens en LLMRouterBench se normalizaron a ausentes; sus costes reportados son 0 USD.
+- `latency_s` está ausente en todas las respuestas históricas; estos datos no permiten comparar latencia.
+- `make validate-unified` coteja el manifiesto, recuentos, unicidad de IDs, claves foráneas, fuentes y métricas. Resultado actual: 0 duplicados y 0 referencias huérfanas.
+
+### Reconciliación del recuento anterior
+
+El número antiguo de LLMRouterBench (1,088,120) incluía 540,061 filas sin observación,
+generadas al completar el producto cartesiano consulta × modelo. El adaptador actual
+conserva las 548,059 respuestas observadas. RouterBench comparte los mismos 11 modelos
+entre sus dos splits; se guarda una sola fila por configuración, no 22.
 
 ## Corrección Aplicada
 
@@ -32,21 +47,22 @@ config_df = config_df.rename(columns={"id": "config_id", "name": "model", "kind"
 ## Uso
 
 ```bash
-# Ejecutar pipeline completo (solo 3 datasets por timeout)
+# Regenerar las tablas unificadas de los 3 datasets incluidos
 source .venv/bin/activate
-python -m routedata.pipeline load
-
-# O usar el script de regeneración
 python regenerate_combined.py
+
+# Validar datasets crudos y Parquet unificados
+python -m routedata.validate
+python -m routedata.validate --unified
 ```
 
 ## Archivos Generados
 
 ```
 data/processed/unified/
-├── queries_combined.parquet    # 88 MB - 144,452 filas
-├── configs_combined.parquet    # 10 KB - 75 filas
-├── responses_combined.parquet  # 456 MB - 2,466,341 filas
+├── queries_combined.parquet    # 144,452 filas
+├── configs_combined.parquet    # 64 filas
+├── responses_combined.parquet  # 1,926,280 filas
 ├── manifest.json               # Metadatos
 └── (parquets individuales por dataset)
 ```
@@ -65,18 +81,21 @@ data/processed/unified/
 ### `configs`
 - `config_id`: ID único de la configuración
 - `model`: Nombre del modelo
-- `kind`: "candidate" o "router"
-- `price_in`, `price_out`: Costo por token
+- `revision`, `effort`, `budget`: metadatos de configuración (pueden estar vacíos/NaN en datasets heredados)
+- `price_in`, `price_out`: precio por millón de tokens cuando existe; cero en adaptadores de coste final
 - `price_source`, `price_date`: Fuente y fecha del precio
+- `hardware`, `source_dataset`: hardware o dataset de origen
 
 ### `responses`
-- `id`: ID único de la respuesta
 - `query_id`: FK a queries
 - `config_id`: FK a configs
-- `correct`: booleano (si la respuesta fue correcta)
-- `score`: score normalizado [0, 1]
-- `response`: Texto de la respuesta
-- `latency_ms`: Latencia (si disponible)
+- `run_id`, `snapshot_id`: identificadores de ejecución/snapshot
+- `response_text`: respuesta textual, vacía para fuentes que no la contienen
+- `in_tokens`, `out_tokens`, `reasoning_tokens`: contadores de tokens; pueden faltar
+- `correct`: calidad normalizada [0, 1], nullable
+- `label_source`: procedencia de la etiqueta, incluyendo `aggregate_fallback`
+- `cost_usd`: coste final por respuesta cuando la fuente lo proporciona
+- `latency_s`: latencia en segundos; actualmente ausente en todos estos datos históricos
 
 ## Agente de Routing
 
@@ -117,7 +136,7 @@ print(decision.reasoning)     # "Heuristic: language=english, domain=general..."
 
 ## Próximos Pasos
 
-1. **R2-Bench**: Procesar por separado o optimizar (30 CSVs, timeout)
+1. **R2-Bench**: decidir e implementar su integración por separado; está excluido de la regeneración actual por tamaño
 2. **Eval pipeline**: Comparar agentes usando el dataset unificado
 3. **Feature extraction**: Agregar features a `queries` (embeddings, dominio)
 4. **Model training**: Entrenar router aprendido con XGBoost

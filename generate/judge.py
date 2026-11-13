@@ -52,5 +52,5 @@ def sample_for_human(df, n: int = 500, strata=("domain", "config_id"), seed: int
 
 def judge_vs_human(judge, human, thr: float = 0.5):
     j, h = np.asarray(judge, float), np.asarray(human, float)
-    pear = float(np.corrcoef(j, h)[0, 1])
+    pear = float(np.corrcoef(j, h)[0, 1]) if j.std() > 0 and h.std() > 0 else float('nan')
     return {"pearson": pear, "kappa": float(cohen_kappa(j >= thr, h >= thr)), "n": int(len(j))}

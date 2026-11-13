@@ -17,17 +17,18 @@ from .efforts import EFFORTS, run_with_effort, EffortSpec
 from .verifiers import verify
 
 def sample_queries(sources: dict, quotas: dict, strat=("domain", "difficulty"), seed: int = 0):
-    """sources: {nombre: DataFrame de queries}; quotas: {nombre: n}. Muestreo estratificado."""
+    """sources: {nombre: DataFrame de queries}; quotas: {nombre: n}. Muestreo estratificado
+    proporcional por `strat` (compatible con pandas>=3: sin groupby.apply)."""
     rng = np.random.default_rng(seed); parts = []
     for name, df in sources.items():
-        n = min(quotas.get(name, len(df)), len(df))
-        cols = [c for c in strat if c in df.columns]
+        n = min(quotas.get(name, len(df)), len(df)); cols = [c for c in strat if c in df.columns]
         if not cols:
             parts.append(df.sample(n=n, random_state=seed)); continue
-        frac = n / len(df)
-        parts.append(df.groupby(cols, group_keys=False).apply(
-            lambda g: g.sample(n=max(1, int(round(len(g) * frac))), random_state=int(rng.integers(1 << 30)))
-            if len(g) else g).head(n))
+        frac, picked = n / len(df), []
+        for _, g in df.groupby(cols):
+            k = min(len(g), max(1, int(round(len(g) * frac))))
+            picked.append(g.sample(n=k, random_state=int(rng.integers(1 << 30))))
+        parts.append(pd.concat(picked).head(n))
     return pd.concat(parts, ignore_index=True)
 
 def build_config_grid(models: dict, budgets=(None,), efforts=("nothink",), hardware="", price_date=""):
@@ -36,7 +37,10 @@ def build_config_grid(models: dict, budgets=(None,), efforts=("nothink",), hardw
     rows = []
     for m, spec in models.items():
         effs = efforts if spec.get("thinking") else ["nothink"]
-        for e, b in itertools.product(effs, budgets):
+        # El presupuesto de longitud solo se cruza con 'nothink'; los niveles think_* ya acotan el
+        # razonamiento por su propio presupuesto (cruzarlos duplicaría configuraciones idénticas).
+        pairs = [(e, b) for e in effs for b in (budgets if e == "nothink" else (None,))]
+        for e, b in pairs:
             cid = f"{m}|{e}|{'def' if b is None else b}"
             rows.append(dict(config_id=cid, model=m, revision=spec["revision"], effort=e,
                              budget=np.nan if b is None else float(b), price_in=spec["price_in"],
@@ -81,7 +85,8 @@ def run(queries: pd.DataFrame, configs: pd.DataFrame, backend_factory, out_dir: 
                     res = run_with_effort(backend, reqs, eff)
                     for r, g in zip(chunk, res):
                         _, ttype = build_messages(r)
-                        corr, src = verify(ttype, g.text, r.get("answer", ""))
+                        _m = r.get("meta"); _m = json.loads(_m) if isinstance(_m, str) and _m else (_m or {})
+                        corr, src = verify(ttype, g.text, r.get("answer", ""), tests=_m.get("tests"))
                         fh.write(json.dumps(dict(
                             query_id=r["query_id"], config_id=cfg["config_id"], run_id=run_id, snapshot_id=snapshot_id,
                             response_text=g.text, in_tokens=g.in_tokens, out_tokens=g.out_tokens,

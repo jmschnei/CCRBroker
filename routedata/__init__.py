@@ -1,2 +1,1 @@
-"""routedata: utilidades para construir y evaluar datasets de LLM routing."""
-__version__ = "0.1.0"
+from .base import wide_to_tables, assert_trainable, EvalOnlyError

@@ -1,242 +1,104 @@
 # Estado del Proyecto: Routedata
 
-**Fecha:** 2026-11-03
-**Estado:** ✅ FUNCIONAL
+**Fecha de verificación:** 2026-11-09
+**Estado:** ✅ Ingestión validada y evaluación local de Fase 1 ejecutada; reproducción de routers publicados y RouterArena pendientes.
 
----
+## Resumen
 
-## Resumen Ejecutivo
+- Esquema de ingesta normalizado para RouterBench, SPROUT y LLMRouterBench.
+- Dataset unificado regenerado; sus recuentos se contrastan con `manifest.json`.
+- Paquete `routedata.agents` contiene seis agentes baseline.
+- La evaluación local aporta evidencia preliminar para Fase 1, pero no completa sus entregables externos ni demuestra las puertas de las fases posteriores de `PLAN.md`.
 
-El paquete `routedata` está completo y funcional para el entrenamiento de modelos de routing. Hemos:
+## Fase 1 · Auditoría y evaluación multiset
 
-1. ✅ Normalizado el esquema de datos de SPROUT para unificarlo con RouterBench y LLMRouterBench
-2. ✅ Generado un dataset unificado con 144,452 queries, 75 configs y 2.4M+ responses
-3. ✅ Implementado el módulo `routedata.agents` con 6 agentes de baseline
-4. ✅ Validado la integridad referencial completa
+- ✅ Auditoría de los 20 modelos oficiales y 15 datasets de rendimiento; 11.480 filas completas consulta-dataset en matriz compartida de 20 candidatos.
+- ✅ Ejecutados seis routers/baselines locales en cinco splits prompt-level 70/30 con las semillas del PLAN; cada router se ajusta solo con train. No son implementaciones reproducidas de cinco routers publicados.
+- Calidad macro por dataset, media ± desviación entre semillas: random 0,478 ± 0,013; best-single 0,718 ± 0,007; length-bucket 0,725 ± 0,011; TF-IDF kNN 0,697 ± 0,014; TF-IDF classifier 0,592 ± 0,015; regresor TF-IDF 0,707 ± 0,011; Dataset Oracle 0,738 ± 0,014; oráculo por consulta 0,916 ± 0,010.
+- La brecha entre el mejor baseline y Dataset Oracle es pequeña (~0,013); el gap al oráculo por consulta permanece (~0,214). Recall-failure pooled entre consultas resolubles: ~0,216. Compatible cualitativamente con el hallazgo del PLAN, pero no es reproducción bibliográfica completa.
+- Auditoría detectó un score agregado para `mbpp/test/665`, excluido del análisis completo, y 1.001 consultas MMLU-Pro test_1000 frente a las 1.000 de la tabla oficial; la diferencia se conserva y documenta.
+- Artefactos: `outputs/phase1/protocol_audit.json` y `outputs/phase1/llmrouterbench_15datasets.json`. El experimento anterior de ArenaHard queda en `outputs/phase1/llmrouterbench_arenahard.json` como piloto aparte.
+- Split contrastado con el loader upstream: por dataset y prompt, sin fuga entre train/test. Este trabajo usa la proporción 70/30 y cinco semillas del PLAN; el API upstream es configurable y sus defaults públicos son distintos en algunos adaptadores.
+- RouterArena `sub_10` (809 preguntas; commit `a4a062ce3313b56bb09c042e1bc37b61d34e3bd8`) está descargado como holdout, preservando `Context` y `Options`, marcado `eval_only`. No hay respuestas de modelos para puntuarlo; la evaluación externa de calidad sigue pendiente de inferencia en GPU. No se ha usado RouterArena para entrenar ni ajustar.
 
----
+## Fase 0 · Infraestructura
 
-## Dataset Unificado
+- ✅ SHA de commit fijados para los 9 modelos del pool y los 3 jueces; verificados contra la API de Hugging Face el 2026-11-09.
+- ✅ `python tests/test_synthetic.py`: 7 pruebas pasan; última suite completa: 38 pasan.
+- ✅ Añadido `scripts/benchmark_vllm.py` y el target `make phase0-measure` para medir throughput agregado, derivar precios y guardar resultados en JSONL.
+- ⏸️ Gate aún abierto: el host disponible es un Mac M2 Max, no tiene NVIDIA/CUDA y no tiene vLLM; no se han medido tok/s reales ni derivado precios. El coste GPU A100 de `pool_openweights.yaml` continúa siendo un supuesto.
+
+Para completar el gate, ejecutar la medición en Linux/NVIDIA con una tarifa verificada del proveedor; repetirla para cada modelo que vaya a usarse en Fase 1 y conservar `outputs/phase0/throughput.jsonl` como evidencia.
+
+## Dataset unificado
 
 **Ubicación:** `data/processed/unified/`
 
-### Estadísticas
-- **Queries:** 144,452 únicas
-- **Configurations:** 75 (modelos × parámetros)
-- **Responses:** 2,466,341 evaluados
-- **Sources:** SPROUT, RouterBench, LLMRouterBench
+| Fuente | Queries | Configs | Responses |
+|---|---:|---:|---:|
+| RouterBench | 73.008 | 11 | 803.088 |
+| SPROUT | 44.241 | 13 | 575.133 |
+| LLMRouterBench | 27.203 | 40 | 548.059 |
+| **Total** | **144.452** | **64** | **1.926.280** |
 
-### Esquema Normalizado
+El manifiesto y las filas Parquet coinciden. Hay cero IDs de query/config duplicados, cero claves foráneas huérfanas y cero claves de respuesta duplicadas.
 
-**queries_combined.parquet**
-```python
-{
-    "query_id": str,      # ID único
-    "text": str,          # Texto de la query
-    "answer": str,        # Respuesta de referencia (o "")
-    "category": str,      # Categoría
-    "difficulty": str,    # Dificultad
-    "source": str         # SPROUT | RouterBench | LLMRouterBench
-}
-```
+### Procedencia y calidad de datos
 
-**configs_combined.parquet**
-```python
-{
-    "config_id": str,     # ID único
-    "model": str,         # Nombre del modelo
-    "temperature": float,
-    "max_tokens": int,
-    "source": str
-}
-```
+- LLMRouterBench aporta pares consulta-modelo observados, no el producto cartesiano completo. El recuento previo de 1.088.120 incluía 540.061 filas sin observación; se retiraron.
+- 4.327 respuestas de LLMRouterBench tienen `label_source="aggregate_fallback"`: su score es agregado al archivo, no una etiqueta independiente por ejemplo.
+- 154 respuestas de RouterBench no traen score. Se conservan con `correct=NaN`, no se convierten en errores.
+- 13 contadores negativos de salida de LLMRouterBench se normalizaron a ausentes. Para esos registros el coste publicado es 0 USD.
+- Ninguna respuesta histórica tiene `latency_s`; no usar este conjunto para comparar latencias.
+- R2-Bench tiene ficheros crudos presentes, pero no está incluido en el unificado. `make validate` revisa una muestra de sus CSV, no integra ni valida todas sus filas.
 
-**responses_combined.parquet**
-```python
-{
-    "query_id": str,      # FK → queries
-    "config_id": str,     # FK → configs
-    "score": float,       # 0.0 - 1.0
-    "reward": float,      # Reward (si aplica)
-    "latency_ms": float   # Latencia
-}
-```
+### Esquema almacenado
 
-### Integridad Referencial
+- **Queries:** `query_id`, `text`, `answer`, `domain`, `category`, `source_dataset`, además de campos opcionales.
+- **Configs:** `config_id`, `model`, `revision`, `effort`, `budget`, precios y fuente/fecha de precio.
+- **Responses:** `query_id`, `config_id`, `run_id`, `snapshot_id`, tokens, `latency_s`, `correct`, `cost_usd` opcional y `label_source`.
+
+## Validación reproducible
+
 ```bash
-✓ 0 query_ids faltantes
-✓ 0 config_ids faltantes
-✓ REFERENTIAL INTEGRITY CHECK PASSED
+make phase1             # regenera RouterBench, SPROUT y LLMRouterBench
+make validate           # valida estructuralmente los datasets crudos
+make validate-unified   # valida manifiesto, recuentos, IDs, FK y métricas
+make test               # suite completa
 ```
-
----
 
 ## Paquete routedata
 
-### Estructura
-```
-routedata/
-├── __init__.py
-├── schema.py           # Esquema normalizado
-├── validate.py         # Validación de integridad
-├── pipeline.py         # Pipeline de carga
-├── stats.py            # Estadísticas
-├── metrics.py          # Métricas
-├── splits.py           # Splits de datos
-├── pricing.py          # Precios
-├── baselines.py        # Baselines básicos
-├── conformal.py        # Inferencia conformal
-├── download.py         # Descarga de datasets
-│
-├── adapters/           # Adaptadores por dataset
-│   ├── base.py
-│   ├── sprout.py       # ✅ Normalizado
-│   ├── routerbench.py  # ✅
-│   ├── llmrouterbench.py # ✅
-│   ├── r2bench.py      # ⚠️ Pendiente optimización
-│   └── routerarena.py
-│
-└── agents/             # 🆕 NUEVO: Agentes de routing
-    ├── __init__.py
-    ├── base.py         # Interface base
-    └── baseline.py     # 6 agentes de baseline
-```
+Incluye esquema y validación, pipeline de carga, estadísticas, métricas, splits, precios, adaptadores y agentes baseline.
 
-### Uso Básico
+### Ejemplo de agente
 
 ```python
-from routedata.agents import create_agent, Candidate
-
-# Crear agente
-agent = create_agent("heuristic")
-
-# Crear candidatos
-candidates = [
-    Candidate(model="gpt-4o", quality=0.9, cost=5.0, latency_ms=800),
-    Candidate(model="claude-3-opus", quality=0.95, cost=15.0, latency_ms=1000),
-    Candidate(model="mistral-7b", quality=0.7, cost=0.5, latency_ms=200),
-]
-
-# Rutear
-decision = agent.route("Query text here", candidates)
-print(f"Selected: {decision.selected_model}")
-print(f"Score: {decision.score:.3f}")
-print(f"Reasoning: {decision.reasoning}")
-```
-
-### Agentes Disponibles
-
-| Agente | Descripción | Caso de uso |
-|--------|-------------|-------------|
-| `random` | Selección aleatoria | Baseline |
-| `cost` | Más barato | Optimización de costos |
-| `quality` | Mejor calidad | Máxima calidad |
-| `latency` | Más rápido | Tiempo real |
-| `hybrid` | Costo + calidad | Balance |
-| `heuristic` | Heurística de complejidad | **Recomendado** |
-
----
-
-## Problemas Resueltos
-
-### 1. Inconsistencia de Esquema (RESUELTO ✅)
-**Problema:** SPROUT usaba `id, prompt, gold` mientras los otros usaban `query_id, text, answer`
-
-**Solución:** Normalizamos el adaptador de SPROUT en `routedata/adapters/sprout.py`
-
-**Resultado:** Esquema unificado para todos los datasets
-
-### 2. Integridad Referencial (RESUELTO ✅)
-**Problema:** 11,951 query_ids y 3 config_ids faltantes en responses
-
-**Solución:** Regeneramos los archivos combinados con el esquema corregido
-
-**Resultado:** 0 IDs faltantes, integridad completa
-
-### 3. R2-Bench Timeout (PENDIENTE ⚠️)
-**Problema:** El pipeline falla al procesar R2-Bench (>10s timeout)
-
-**Estado:** Excluido del pipeline automático por ahora
-
-**Solución propuesta:**
-- Optimizar el pipeline para R2-Bench
-- O procesar R2-Bench en un paso separado
-
----
-
-## Próximos Pasos
-
-### Inmediatos
-- [ ] **Integrar R2-Bench** en el pipeline (optimizar o proceso separado)
-- [ ] **Validar heurísticas** en HeuristicAgent con datos reales
-- [ ] **Testear agentes** con datos del dataset unificado
-
-### Mediano plazo
-- [ ] **Entrenar modelo de routing aprendido**
-  - Ej: XGBoost, LightGBM
-  - Features: complejidad, longitud, keywords
-  - Target: config_id óptimo
-- [ ] **Agregar features adicionales**
-  - Embeddings de queries
-  - Métricas de complejidad
-  - Metadata de contexto
-
-### Largo plazo
-- [ ] **A/B testing** de agentes vs modelo aprendido
-- [ ] **Reinforcement learning** para routing
-- [ ] **Personalización** por dominio/user
-
----
-
-## Comandos Útiles
-
-### Verificar datos
-```bash
-cd /Users/jumo04/Documents/DFKI/Projects/NFDI4Culture/Developments/own_broker
-
-# Ver estadísticas
-.venv/bin/python -c "
-import pandas as pd
-queries = pd.read_parquet('data/processed/unified/queries_combined.parquet')
-print(f'Queries: {len(queries):,}')
-print(queries['category'].value_counts())
-"
-
-# Ver integridad
-.venv/bin/python -m routedata.validate
-"
-
-### Regenerar dataset combinado
-```bash
-.venv/bin/python regenerate_combined.py
-```
-
-### Usar agentes
-```python
-from routedata.agents import create_agent, Candidate
+from routedata.agents import Candidate, create_agent
 
 agent = create_agent("heuristic")
 candidates = [
-    Candidate(model="gpt-4o", quality=0.9, cost=5.0, latency_ms=800),
-    Candidate(model="mistral-7b", quality=0.7, cost=0.5, latency_ms=200),
+    Candidate(name="qwen2.5-7b-instruct", cost_per_1k_tokens=0.05, quality_score=0.62, latency_ms=180),
+    Candidate(name="qwen3-30b-a3b", cost_per_1k_tokens=0.30, quality_score=0.88, latency_ms=900),
 ]
-decision = agent.route("Your query here", candidates)
+decision = agent.decide("Explain how transformers work.", candidates)
+print(decision.chosen_model, decision.reasoning)
 ```
 
----
+Agentes disponibles: `random`, `cost`, `quality`, `latency`, `hybrid` y `heuristic`.
 
-## Conclusiones
+## Pendientes
 
-El proyecto está **listo para usar** en entrenamiento de modelos de routing:
+### Próximos
+- [ ] Integrar R2-Bench en un flujo separado o por lotes, preservando IDs, scores ausentes y su procedencia.
+- [ ] Reproducir al menos cinco métodos publicados del benchmark con sus implementaciones/configuraciones y comparar con las baselines locales.
+- [ ] Generar resultados para los candidatos y evaluar calidad en RouterArena `sub_10` sin entrenar ni ajustar con su contenido.
+- [ ] Validar agentes con datos reales y documentar métricas.
+- [ ] Completar flujos de generación/evaluación de Fases 2–5 y comprobar sus criterios de paso.
 
-✅ Dataset unificado con esquema consistente
-✅ Integridad referencial garantizada
-✅ API limpia y documentada
-✅ Baselines implementados
-✅ Estructura modular y extensible
+### Más adelante
+- Entrenar y comparar routers aprendidos, añadir features (embeddings y complejidad), ejecutar A/B testing y estudiar personalización/RL.
 
-**Listo para:**
-1. Entrenar modelos de routing aprendidos
-2. Evaluar baselines vs modelo aprendido
-3. Experimentar con diferentes estrategias de routing
-4. Personalizar por dominio o caso de uso
+## Conclusión
+
+La ingesta y la integridad estructural de los tres datasets están verificadas localmente. La aptitud para experimentos concretos depende de filtrar las etiquetas agregadas o ausentes y de completar las reproducciones y gates del plan; el dataset todavía no constituye evidencia de que dichas fases se hayan superado.

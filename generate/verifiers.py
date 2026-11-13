@@ -55,5 +55,6 @@ def verify(ttype: str, text: str, gold, tests: str | None = None):
     if ttype == "exact":
         return verify_exact(text, gold), "verifier"
     if ttype == "code" and tests:
-        return run_code_tests(text, tests), "verifier"
+        m = re.findall(r"```(?:python)?\n(.*?)```", text, flags=re.S)
+        return run_code_tests(m[-1] if m else text, tests), "verifier"
     return None, None

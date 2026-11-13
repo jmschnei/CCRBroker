@@ -1,0 +1,5 @@
+{
+  "org/Modelo-pequeno": "http://localhost:8001",
+  "org/Modelo-mediano": "http://localhost:8002",
+  "org/Modelo-grande": "http://localhost:8003"
+}

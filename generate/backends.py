@@ -83,3 +83,33 @@ class MockBackend:
                                  finish_reason="length" if used >= r.max_tokens else "stop",
                                  latency_s=used / 80.0))
         return out
+
+
+class OpenAICompatBackend:
+    """Cliente para servidores compatibles con OpenAI (p. ej. `vllm serve`). Permite episodios
+    CONCURRENTES (hilos) contra un servidor con batching continuo, que es lo que da el throughput
+    por el que se deriva el precio por token. Solo usa la biblioteca estándar.
+
+    NO verificado contra un servidor real desde este entorno (probado con un servidor falso local).
+    `cached_tokens` se lee de usage.prompt_tokens_details si el servidor lo expone (depende de la versión)."""
+    def __init__(self, base_url: str, model: str, api_key: str = "EMPTY", timeout: float = 600.0):
+        self.base_url, self.name, self.api_key, self.timeout = base_url.rstrip("/"), model, api_key, timeout
+    def _one(self, r: GenRequest) -> GenResult:
+        import json, urllib.request
+        body = dict(model=self.name, messages=r.messages, max_tokens=r.max_tokens, temperature=r.temperature,
+                    top_p=r.top_p, seed=r.seed)
+        if r.stop: body["stop"] = r.stop
+        if r.enable_thinking is not None: body["chat_template_kwargs"] = {"enable_thinking": bool(r.enable_thinking)}
+        req = urllib.request.Request(self.base_url + "/v1/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"})
+        t0 = time.time()
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            j = json.loads(resp.read().decode())
+        ch, u = j["choices"][0], j.get("usage", {})
+        g = GenResult(text=ch["message"].get("content") or "", in_tokens=int(u.get("prompt_tokens", 0)),
+                      out_tokens=int(u.get("completion_tokens", 0)), finish_reason=ch.get("finish_reason") or "stop",
+                      latency_s=time.time() - t0)
+        g.cached_tokens = (u.get("prompt_tokens_details") or {}).get("cached_tokens")
+        return g
+    def generate(self, reqs):
+        return [self._one(r) for r in reqs]
