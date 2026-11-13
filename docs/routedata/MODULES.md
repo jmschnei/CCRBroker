@@ -22,9 +22,6 @@ agentes de routing y utilidades de infraestructura.
 | [`validate.py`](validate.md) | Validación estructural y semántica de datos | 1 | 8 |
 | [`drift.py`](drift.md) | Detección y cuantificación de deriva temporal | 4 | 9 |
 | [`agent.py`](agent.md) | Utilidades para agentes multi-turno | 2 | 8 |
-| [`routerarena.py`](routerarena.md) | Integración con RouterArena benchmark | — | 2 |
-| [`routerbench.py`](routerbench.md) | Integración con RouterBench benchmark | — | 1 |
-| [`base.py`](base.md) | Clases base y utilidades compartidas | 1 | 2 |
 
 ## Submódulos
 
