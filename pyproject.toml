@@ -74,6 +74,7 @@ include = ["routedata*", "generate*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # los tests importan scripts/ y estimate_budget desde la raíz
 addopts = "-ra --strict-markers"
 
 [tool.ruff]
