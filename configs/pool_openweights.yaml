@@ -11,7 +11,7 @@ models:
   Qwen/Qwen2.5-Coder-7B-Instruct:  {revision: c03e6d358207e414f1eca0bb1891e29f1db0e242, thinking: false, size_b: 7,   tp: 1}
   deepseek-ai/DeepSeek-R1-0528-Qwen3-8B: {revision: 6e8885a6ff5c1dc5201574c8fd700323f23c25fa, thinking: true, size_b: 8, tp: 1}
   meta-llama/Llama-3.1-70B-Instruct: {revision: 1605565b47bb9346c5515c34102e054115b4f98b, thinking: false, size_b: 70, tp: 4}
-  Qwen/Qwen3-235B-A22B-Instruct-2507: {revision: ac9c66cc9b46af7306746a9250f23d47083d689e, thinking: false, size_b: 235, tp: 8}
+  Qwen/Qwen3-235B-A22B-Instruct-2507: {revision: ac9c66cc9b46af7306746a9250f23d47083d689e, thinking: false, size_b: 235, active_b: 22, tp: 8}  # MoE: 22B activos
 # Jueces (familias distintas; idealmente fuera del pool evaluado)
 judges:
   - {name: Qwen/Qwen3-32B, revision: 9216db5781bf21249d130ec9da846c4624c16137}

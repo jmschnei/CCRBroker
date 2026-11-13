@@ -203,18 +203,38 @@ python examples/load_unified_dataset.py    # estadísticas del unificado real
 python examples/inspect_raw_datasets.py    # validación de data/raw/
 ```
 
-### PASO 5: Evaluación en RouterArena `sub_10` (requiere GPU)
+### PASO 5: Evaluación en RouterArena `sub_10` (requiere GPU para generar)
+
+Se usa el **evaluador oficial** de RouterArena (commit fijado en `generate/routerarena.py`,
+`ARENA_COMMIT`), así que los números son comparables con su leaderboard. Ese evaluador solo
+sabe llamar a APIs comerciales; nuestro puente genera las respuestas con vLLM sobre los
+prompts que renderiza el propio RouterArena y le entrega el fichero de predicciones en su
+formato. Los modelos locales se precian con su regla `local:` (`model_cost/local_pricing.yaml`).
+
+Requisitos: `uv` (lo usa RouterArena; trae su propio Python 3.11/3.12) y red para el setup.
 
 ```bash
 source .venv/bin/activate
 
-# Cargar responses de los candidatos en GPU y evaluar sobre el holdout sub_10 (809 queries)
-python << 'PYEOF'
-from routedata.routerarena import load_arenaholdout, evaluate_candidates
-snaps = load_arenaholdout("data/raw/routerarena")  # ya descargado, commit a4a062ce33
-# Substituir con backends VLLMBackend reales para cada modelo candidato
-PYEOF
+# 1) Una vez (CPU + red): clona RouterArena en external/, `uv sync` y prepara el dataset
+make phase1-arena-setup
+
+# 2) GPU: respuestas de los 9 modelos del pool a los 809 prompts (reanudable, en
+#    outputs/routerarena/cache/). Alternativa sin cargar vLLM en proceso:
+#    python scripts/run_routerarena.py generate --backend openai --endpoints configs/agent_endpoints.json
+make phase1-arena-generate            # BACKEND=mock para probar el flujo sin GPU
+
+# 3) CPU: cada candidato como router de un solo modelo → accuracy, coste/1K y Arena score
+make phase1-arena-candidates          # → outputs/routerarena/candidates_sub_10.json
+
+# 4) CPU: un router propio a partir de sus decisiones {global_index: modelo}
+python scripts/run_routerarena.py evaluate --router mi-router --choices decisiones.json
+#    → outputs/routerarena/mi-router_sub_10.json (incluye métricas de optimalidad)
 ```
+
+> ⚠️ Reglas de RouterArena: es **solo de evaluación**. El router no puede entrenarse ni
+> ajustarse con sus datos y debe decidir con el contenido de la consulta, no con el dataset de
+> origen ni con la plantilla del prompt (`routedata.adapters.base.assert_trainable` bloquea lo primero).
 
 ### Gate de paso Fase 1
 > ✅ Dataset unificado validado sin duplicados ni FK huérfanas.
