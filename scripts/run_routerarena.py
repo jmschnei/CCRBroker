@@ -11,6 +11,7 @@ Flujo (ver RUNBOOK_COMPLETE.md, Fase 1, paso 5):
 
     # 3) CPU: cada candidato como "router" de un solo modelo (accuracy/coste por modelo)
     python scripts/run_routerarena.py candidates
+    #    (caché y resultados van a outputs/routerarena/<backend>/; usa el mismo --backend en todos los pasos)
 
     # 4) CPU: un router propio a partir de sus decisiones {global_index: modelo}
     python scripts/run_routerarena.py evaluate --router mi-router --choices decisiones.json
@@ -39,8 +40,8 @@ from generate.backends import MockBackend, OpenAICompatBackend
 DEFAULTS = {
     "arena_dir": ROOT / "external" / "RouterArena",
     "pool": ROOT / "configs" / "pool_openweights.yaml",
-    "cache": ROOT / "outputs" / "routerarena" / "cache",
-    "out": ROOT / "outputs" / "routerarena",
+    # caché y resultados separados por backend: las respuestas del Mock nunca se reutilizan como reales
+    "out_root": ROOT / "outputs" / "routerarena",
 }
 
 
@@ -91,6 +92,7 @@ def _evaluate(args, router: str, choices: dict[str, str], pool: dict[str, dict[s
     result = {
         "router": router,
         "split": args.split,
+        "backend": args.backend,
         "routerarena_commit": RA.ARENA_COMMIT,
         "models": models,
         "invalid_generations": invalid,
@@ -109,8 +111,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--arena-dir", type=Path, default=DEFAULTS["arena_dir"])
     ap.add_argument("--pool", type=Path, default=DEFAULTS["pool"])
     ap.add_argument("--models", help="subconjunto del pool, separado por comas")
-    ap.add_argument("--cache", type=Path, default=DEFAULTS["cache"])
-    ap.add_argument("--out", type=Path, default=DEFAULTS["out"])
+    ap.add_argument("--cache", type=Path, help="por defecto outputs/routerarena/<backend>/cache")
+    ap.add_argument("--out", type=Path, help="por defecto outputs/routerarena/<backend>")
     ap.add_argument("--split", default="sub_10", choices=tuple(RA.SPLIT_FILES))
     ap.add_argument("--backend", default="vllm", choices=("vllm", "openai", "mock"))
     ap.add_argument("--endpoints", help="JSON {modelo: url} para --backend openai")
@@ -122,6 +124,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--bits", type=int, default=16, help="precisión servida, para el precio local")
     ap.add_argument("--no-optimality", dest="optimality", action="store_false")
     args = ap.parse_args(argv)
+    backend_root = DEFAULTS["out_root"] / args.backend
+    args.out = args.out or backend_root
+    args.cache = args.cache or backend_root / "cache"
 
     if args.cmd == "setup":
         RA.setup(args.arena_dir)

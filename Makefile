@@ -126,7 +126,7 @@ phase1-arena-generate: venv
 	@$(PY) scripts/run_routerarena.py generate --backend $(BACKEND)
 
 phase1-arena-candidates: venv
-	@$(PY) scripts/run_routerarena.py candidates
+	@$(PY) scripts/run_routerarena.py candidates --backend $(BACKEND)
 
 .PHONY: phase1-audit
 phase1-audit: venv

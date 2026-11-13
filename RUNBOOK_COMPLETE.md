@@ -220,16 +220,18 @@ source .venv/bin/activate
 make phase1-arena-setup
 
 # 2) GPU: respuestas de los 9 modelos del pool a los 809 prompts (reanudable, en
-#    outputs/routerarena/cache/). Alternativa sin cargar vLLM en proceso:
+#    outputs/routerarena/vllm/cache/). Alternativa sin cargar vLLM en proceso:
 #    python scripts/run_routerarena.py generate --backend openai --endpoints configs/agent_endpoints.json
 make phase1-arena-generate            # BACKEND=mock para probar el flujo sin GPU
 
 # 3) CPU: cada candidato como router de un solo modelo → accuracy, coste/1K y Arena score
-make phase1-arena-candidates          # → outputs/routerarena/candidates_sub_10.json
+make phase1-arena-candidates          # → outputs/routerarena/vllm/candidates_sub_10.json
 
 # 4) CPU: un router propio a partir de sus decisiones {global_index: modelo}
 python scripts/run_routerarena.py evaluate --router mi-router --choices decisiones.json
-#    → outputs/routerarena/mi-router_sub_10.json (incluye métricas de optimalidad)
+#    → outputs/routerarena/vllm/mi-router_sub_10.json (incluye métricas de optimalidad)
+#    Caché y resultados se separan por backend (outputs/routerarena/<backend>/): las
+#    respuestas de BACKEND=mock nunca se mezclan con las reales.
 ```
 
 > ⚠️ Reglas de RouterArena: es **solo de evaluación**. El router no puede entrenarse ni
