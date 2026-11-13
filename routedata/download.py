@@ -8,12 +8,12 @@ Uso:
     python -m routedata.download --dataset llmrouterbench
     python -m routedata.download --dataset all --force  # re-descarga aunque ya existan
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -87,6 +87,7 @@ def download_file(url: str, dest: Path) -> bool:
     try:
         # Usamos curl para soportar progreso y retomar
         import subprocess
+
         result = subprocess.run(
             ["curl", "-L", "-o", str(tmp), url, "--progress-bar", "--fail"],
             capture_output=True,
@@ -135,13 +136,11 @@ def download_dataset(name: str, force: bool = False) -> list[Path]:
         try:
             import json
             import urllib.request
+
             url = f"https://huggingface.co/api/datasets/{src['hf_id']}/tree/main?recursive=true"
             with urllib.request.urlopen(url) as resp:
                 tree = json.load(resp)
-            files = [
-                f["path"] for f in tree
-                if f["type"] == "file" and not f["path"].startswith(".")
-            ]
+            files = [f["path"] for f in tree if f["type"] == "file" and not f["path"].startswith(".")]
             log.info("Encontrados %d archivos en R2-Bench", len(files))
         except Exception as e:
             log.warning("No pude detectar archivos de R2-Bench: %s", e)

@@ -5,6 +5,7 @@ an explicit 20-model open-weight candidate list. It does not treat aggregate
 benchmark scores as per-query labels and does not report costs/latency where the
 source data has no meaningful cost variation or timing observations.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,19 +51,18 @@ OPEN_WEIGHT_MODELS = (
 )
 
 
-def load_experiment_data(unified_dir: Path, dataset: str = DATASET) -> tuple[list[str], list[str], np.ndarray]:
+def load_experiment_data(
+    unified_dir: Path, dataset: str = DATASET
+) -> tuple[list[str], list[str], np.ndarray]:
     """Return sorted query texts, fixed model IDs, and a complete per-instance score matrix."""
-    queries = pd.read_parquet(
-        unified_dir / "queries_llmrouterbench.parquet", columns=["query_id", "text"]
-    )
+    queries = pd.read_parquet(unified_dir / "queries_llmrouterbench.parquet", columns=["query_id", "text"])
     responses = pd.read_parquet(
         unified_dir / "responses_llmrouterbench.parquet",
         columns=["query_id", "config_id", "correct", "label_source"],
     )
     prefix = f"{dataset}/test/"
     responses = responses[
-        responses["query_id"].str.startswith(prefix)
-        & responses["label_source"].eq("per_record")
+        responses["query_id"].str.startswith(prefix) & responses["label_source"].eq("per_record")
     ].copy()
     observed_models = set(responses["config_id"].unique())
     missing_models = set(OPEN_WEIGHT_MODELS) - observed_models
@@ -175,9 +175,7 @@ def run_experiment(unified_dir: Path, dataset: str = DATASET) -> dict[str, Any]:
             "routers": {},
         }
         for strategy in strategies:
-            choices = _fit_predict(
-                strategy, train_texts, test_texts, scores[train_idx], model_ids, seed
-            )
+            choices = _fit_predict(strategy, train_texts, test_texts, scores[train_idx], model_ids, seed)
             seed_result["routers"][strategy] = _score_choices(scores[test_idx], choices)
         seed_result["routers"]["oracle_upper_bound"] = _score_choices(
             scores[test_idx], scores[test_idx].argmax(axis=1)
@@ -212,13 +210,17 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--unified-dir", type=Path, default=ROOT / "data" / "processed" / "unified")
     parser.add_argument("--dataset", default=DATASET, choices=[DATASET])
-    parser.add_argument("--output", type=Path, default=ROOT / "outputs" / "phase1" / "llmrouterbench_arenahard.json")
+    parser.add_argument(
+        "--output", type=Path, default=ROOT / "outputs" / "phase1" / "llmrouterbench_arenahard.json"
+    )
     args = parser.parse_args(argv)
 
     result = run_experiment(args.unified_dir, args.dataset)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
-    print(f"Dataset: {result['dataset']} · queries={result['queries']} · candidates={result['candidate_count']}")
+    print(
+        f"Dataset: {result['dataset']} · queries={result['queries']} · candidates={result['candidate_count']}"
+    )
     for strategy, metrics in result["summary_mean_std"].items():
         print(
             f"{strategy:22s} quality={metrics['quality_mean']['mean']:.4f} "

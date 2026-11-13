@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from .adapters.routerbench import load as load_routerbench
-from .adapters.sprout import SproutAdapter, create_sprout_adapter
-from .adapters.r2bench import R2BenchAdapter
 from .adapters.llmrouterbench import LLMRouterBenchAdapter
+from .adapters.r2bench import R2BenchAdapter
+from .adapters.routerbench import load as load_routerbench
+from .adapters.sprout import create_sprout_adapter
 
 
 class Pipeline:
@@ -72,8 +72,11 @@ class Pipeline:
 
         return results
 
-    def save(self, results: dict[str, tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]],
-             output_dir: str | None = None) -> None:
+    def save(
+        self,
+        results: dict[str, tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]],
+        output_dir: str | None = None,
+    ) -> None:
         """Guarda los resultados en formato Parquet."""
         out_dir = Path(output_dir) if output_dir else self.processed_root
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -139,7 +142,7 @@ class Pipeline:
                 json.dump(manifest, f, indent=2)
 
             print(f"\n{'=' * 60}")
-            print(f"COMBINED DATASET:")
+            print("COMBINED DATASET:")
             print(f"{'=' * 60}")
             print(f"  Total queries: {len(combined_queries):,}")
             print(f"  Total configs: {len(combined_configs):,}")

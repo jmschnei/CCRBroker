@@ -1,6 +1,6 @@
 # 📦 Módulo `routedata/` — Core data & metrics
 
-Este módulo contiene todo el núcleo de procesamiento de datos, métricas de evaluación, 
+Este módulo contiene todo el núcleo de procesamiento de datos, métricas de evaluación,
 agentes de routing y utilidades de infraestructura.
 
 ---

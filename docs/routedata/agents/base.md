@@ -101,14 +101,14 @@ The agent should:
 
 ```python
     Make a routing decision for the given query.
-    
+
     Args:
         query: The user's query/question.
         candidates: List of candidate models to choose from.
-    
+
     Returns:
         A RoutingDecision with the chosen model and reasoning.
-    
+
     Raises:
         NotImplementedError: If not implemented by subclass.
 ```

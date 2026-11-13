@@ -29,7 +29,7 @@ análisis con escenarios de precio (±50 %) para comprobar sensibilidad.
 
 ```python
     Precio efectivo por millón de tokens.
-    
+
     decode_tok_per_s / prefill_tok_per_s: *throughput agregado del servidor* (todas las
     peticiones concurrentes), medido con carga realista. utilization: fracción del tiempo
     que la GPU está ocupada (penaliza el ocio).

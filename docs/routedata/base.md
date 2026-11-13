@@ -48,7 +48,7 @@ antes de usarlo.
 
 ```python
     Formato ancho (una fila por consulta; columnas por modelo) → (queries, configs, responses).
-    
+
     perf_cols: columnas con la calidad por modelo. El coste por modelo se toma de
     cost_cols[modelo] o de f"{modelo}{cost_suffix}". Como solo hay coste final (no tokens),
     los precios por token quedan en 0 y se usa `cost_usd`.

@@ -6,12 +6,13 @@
 
 Ejecuta:  pytest tests/test_pipeline.py
 """
+
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
-import numpy as np
 
 from routedata.pipeline import Pipeline
 from routedata.schema import validate as validate_table
@@ -46,8 +47,12 @@ def test_pipeline_save_writes_per_dataset_and_combined(tmp_path):
     pipeline.save({"ds_a": _small_dataset()}, output_dir=str(out))
 
     expected = [
-        "queries_ds_a.parquet", "configs_ds_a.parquet", "responses_ds_a.parquet",
-        "queries_combined.parquet", "configs_combined.parquet", "responses_combined.parquet",
+        "queries_ds_a.parquet",
+        "configs_ds_a.parquet",
+        "responses_ds_a.parquet",
+        "queries_combined.parquet",
+        "configs_combined.parquet",
+        "responses_combined.parquet",
         "manifest.json",
     ]
     for name in expected:
@@ -80,9 +85,15 @@ def test_pipeline_save_referential_integrity(tmp_path):
 
 
 def test_response_validation_allows_missing_correct_label():
-    responses = pd.DataFrame({"query_id": ["q1", "q2"], "config_id": ["c1", "c1"],
-                              "in_tokens": [1, 0], "out_tokens": [2, 0],
-                              "correct": [1.0, float("nan")]})
+    responses = pd.DataFrame(
+        {
+            "query_id": ["q1", "q2"],
+            "config_id": ["c1", "c1"],
+            "in_tokens": [1, 0],
+            "out_tokens": [2, 0],
+            "correct": [1.0, float("nan")],
+        }
+    )
 
     assert validate_table(responses, "responses") == []
 
@@ -91,13 +102,15 @@ def test_routerarena_queries_preserve_context_options_and_eval_only():
     from routedata.adapters.base import EvalOnlyError, assert_trainable
     from routedata.adapters.routerarena import to_queries
 
-    source = pd.DataFrame({
-        "Global Index": ["holdout-1"],
-        "Context": ["Use the passage."],
-        "Question": ["Which answer is correct?"],
-        "Options": [np.array(["first", "second"])],
-        "Answer": ["B"],
-    })
+    source = pd.DataFrame(
+        {
+            "Global Index": ["holdout-1"],
+            "Context": ["Use the passage."],
+            "Question": ["Which answer is correct?"],
+            "Options": [np.array(["first", "second"])],
+            "Answer": ["B"],
+        }
+    )
     queries = to_queries(source)
 
     assert "Use the passage." in queries.loc[0, "text"]

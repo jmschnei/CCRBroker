@@ -22,24 +22,24 @@ ERROR() { echo "[gpu_setup] ERROR: $*" >&2; exit 1; }
 # ---------- GPU discovery ---------------------------------------------------
 discover_gpus() {
     LOG "=== Descubriendo GPUs ==="
-    
+
     if ! command -v nvidia-smi &>/dev/null; then
         ERROR "nvidia-smi no encontrado. ¿Tenés CUDA installed?"
     fi
-    
+
     # Summary
     echo ""
     echo "GPU Count: $(nvidia-smi --query-gpu=count --format=csv,noheader | head -1)"
     echo ""
-    
+
     nvidia-smi --query-gpu=index,name,memory.total,memory.free,driver_version,cuda_version \
         --format=csv,noheader,nounits
-    
+
     echo ""
     echo "PCIe topology:"
     nvidia-smi topo -m 2>/dev/null || echo "  (no disponible)"
     echo ""
-    
+
     echo "CUDA drivers:"
     nvcc --version 2>/dev/null || echo "  nvcc no encontrado"
     echo ""
@@ -48,24 +48,24 @@ discover_gpus() {
 # ---------- vLLM installation -----------------------------------------------
 install_vllm() {
     LOG "=== Instalando vLLM y deps de evaluación ==="
-    
+
     if [ ! -f "$VENV" ]; then
         ERROR "venv no existe en $REPO_ROOT. Correr 'make install' primero."
     fi
-    
+
     source "$VENV"
-    
+
     # Install base + vllm extras
     pip install -q "vllm>=0.6.0" 2>&1 | tail -5 || true
-    
+
     # Also install evaluation deps
     pip install -q "datasets>=2.16" "rouge-score" "sacrebleu" "jiwer" "spacy" 2>&1 | tail -5 || true
-    
+
     # Verify installation
     python -c "import vllm; print('vLLM version:', vllm.__version__)" 2>/dev/null || {
         ERROR "vLLM installation failed. Check CUDA compatibility."
     }
-    
+
     LOG "vLLM installed: $(python -c 'import vllm; print(vllm.__version__)')"
 }
 
@@ -73,13 +73,13 @@ install_vllm() {
 pin_model() {
     local model="$1"
     LOG "=== Pinning revision de HF para: $model ==="
-    
+
     if [ -z "$model" ]; then
         ERROR "Uso: gpu_setup.sh --pin <model_name>"
     fi
-    
+
     source "$VENV"
-    
+
     # Find the HF hub entry for this model
     python3 << PYEOF
 import requests, json
@@ -90,30 +90,30 @@ try:
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
-    
+
     sha = data.get("sha", "UNKNOWN")
     last_modified = data.get("lastModified", "UNKNOWN")
-    
+
     print(f"Modelo: {model}")
     print(f"Revision (commit SHA): {sha[:12]}...")
     print(f"Última actualización: {last_modified}")
     print(f"Tags: {', '.join(data.get('tags', [])[:5])}")
     print()
-    
+
     # Write to pin file
     import os, sys
     repo_dir = os.path.dirname(sys.argv[0]) if len(sys.argv) > 1 else "."
     pin_file = os.path.expanduser("~/.codex/gpu_model_pins.json")
-    
+
     pins = {}
     if os.path.exists(pin_file):
         with open(pin_file) as f:
             pins = json.load(f)
-    
+
     pins[model] = {"sha": sha, "pinned_at": last_modified}
     with open(pin_file, "w") as f:
         json.dump(pins, f, indent=2)
-    
+
     print(f"Revision pinned to: {pin_file}")
 except Exception as e:
     print(f"Error fetching model info: {e}", file=sys.stderr)
@@ -124,13 +124,13 @@ PYEOF
 # ---------- Benchmark --------------------------------------------------------
 benchmark_model() {
     local model="$1"
-    
+
     if [ -z "$model" ]; then
         ERROR "Uso: gpu_setup.sh --bench <model_name>"
     fi
-    
+
     source "$VENV"
-    
+
     python3 << PYEOF
 import time, json, sys
 from pathlib import Path
@@ -167,21 +167,21 @@ benchmarks = [
 results = []
 for batch_size, max_out in benchmarks:
     prompts = ["What is the capital of France? Answer in one sentence."] * batch_size
-    
+
     t0 = time.time()
     outs = llm.generate(prompts, SamplingParams(temperature=0.2, max_tokens=max_out, seed=42))
     t1 = time.time()
-    
+
     dt = t1 - t0
     total_in = sum(len(o.prompt_token_ids) for o in outs)
     total_out = sum(sum(c.token_ids for c in o.outputs) for o in outs)
-    
+
     # Token throughput metrics
     input_tps = total_in / (dt * 1e6) if dt > 0 else 0  # M tokens/sec
     output_tps = total_out / dt if dt > 0 else 0        # tokens/sec
-    
+
     latency_per_req_ms = (dt / batch_size) * 1000 if batch_size > 0 else 0
-    
+
     results.append({
         "batch": batch_size,
         "max_out_tokens": max_out,

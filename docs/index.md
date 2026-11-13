@@ -63,7 +63,7 @@ routedata_kit/
 │   ├── phase2.py              # Phase 2 specific code
 │   ├── prompts.py             # Prompt templates for all domains
 │   ├── run_phase2.py          # Phase 2 CLI orchestrator
-│   ├── run_phase3.py          # Phase 3 CLI orchestrator  
+│   ├── run_phase3.py          # Phase 3 CLI orchestrator
 │   ├── run_phase4.py          # Phase 4 CLI orchestrator
 │   ├── verifiers.py           # Task verifiers per domain
 │   └── envs/                  # Agent environment support
@@ -212,7 +212,7 @@ class Config(BaseModel):
     budget_tokens: Optional[int] = None
     price_in: float
     price_out: float
-    
+
 class Response(BaseModel):
     query_id: str
     config_id: str

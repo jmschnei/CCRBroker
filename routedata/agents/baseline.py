@@ -13,12 +13,10 @@ These agents use simple, explainable strategies:
 
 from __future__ import annotations
 
-import hashlib
 import random
-import re
 from typing import Any
 
-from .base import RoutingAgent, RoutingDecision, Candidate, RoutingStrategy
+from .base import Candidate, RoutingAgent, RoutingDecision, RoutingStrategy
 
 
 class RandomAgent(RoutingAgent):
@@ -141,11 +139,7 @@ class HybridAgent(RoutingAgent):
             cost_norm = min(cost / 10.0, 1.0)
             latency_norm = min(latency / 5000.0, 1.0)
 
-            score = (
-                self.w_quality * quality
-                - self.w_cost * cost_norm
-                - self.w_latency * latency_norm
-            )
+            score = self.w_quality * quality - self.w_cost * cost_norm - self.w_latency * latency_norm
             scored.append((c.name, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
@@ -156,8 +150,7 @@ class HybridAgent(RoutingAgent):
             chosen_model=chosen_name,
             strategy=RoutingStrategy.QUALITY,
             reasoning=(
-                f"Hybrid score (w_q={self.w_quality}, w_c={self.w_cost}, w_l={self.w_latency}): "
-                f"{chosen_name}"
+                f"Hybrid score (w_q={self.w_quality}, w_c={self.w_cost}, w_l={self.w_latency}): {chosen_name}"
             ),
             all_scores={name: score for name, score in scored},
         )
@@ -177,9 +170,39 @@ class HeuristicAgent(RoutingAgent):
 
     # Domain-specific keywords
     DOMAIN_KEYWORDS = {
-        "legal": ["law", "legal", "contract", "court", "regulation", "statute", "jurisprudence", "recht", "gesetz", "vertrags"],
-        "medical": ["medical", "patient", "diagnosis", "symptom", "treatment", "disease", "symptome", "behandlung"],
-        "technical": ["algorithm", "code", "software", "api", "database", "programming", "implement", "algorithmus", "code"],
+        "legal": [
+            "law",
+            "legal",
+            "contract",
+            "court",
+            "regulation",
+            "statute",
+            "jurisprudence",
+            "recht",
+            "gesetz",
+            "vertrags",
+        ],
+        "medical": [
+            "medical",
+            "patient",
+            "diagnosis",
+            "symptom",
+            "treatment",
+            "disease",
+            "symptome",
+            "behandlung",
+        ],
+        "technical": [
+            "algorithm",
+            "code",
+            "software",
+            "api",
+            "database",
+            "programming",
+            "implement",
+            "algorithmus",
+            "code",
+        ],
         "financial": ["finance", "investment", "stock", "market", "economy", "finanzen", "investment"],
         "general": [],
     }

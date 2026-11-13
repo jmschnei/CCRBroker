@@ -19,10 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +38,14 @@ class ValidationReport:
     total_records: int = 0
     records_sampled: bool = False
     total_models: int = 0
-    columns: List[str] = field(default_factory=list)
-    expected_columns: List[str] = field(default_factory=list)
-    missing_columns: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    sample: Optional[Dict[str, Any]] = None
+    columns: list[str] = field(default_factory=list)
+    expected_columns: list[str] = field(default_factory=list)
+    missing_columns: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    sample: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "dataset": self.dataset,
             "valid": self.valid,
@@ -319,7 +318,8 @@ def validate_r2bench(data_root: Path = DATA_ROOT) -> ValidationReport:
 
     # Check a sample of files (first 5 per model)
     from collections import defaultdict
-    model_files: Dict[str, List[Path]] = defaultdict(list)
+
+    model_files: dict[str, list[Path]] = defaultdict(list)
     for f in csv_files:
         # data/<org>/<model>/<budget>_judge.csv
         parts = f.parts
@@ -335,6 +335,7 @@ def validate_r2bench(data_root: Path = DATA_ROOT) -> ValidationReport:
         for f in files[:3]:  # Check first 3 per model
             try:
                 import pandas as pd
+
                 df = pd.read_csv(f, nrows=100)  # Read first 100 rows
                 missing = R2BENCH_REQUIRED_COLUMNS - set(df.columns)
                 if missing:
@@ -380,7 +381,8 @@ def validate_r2bench(data_root: Path = DATA_ROOT) -> ValidationReport:
 # Aggregate
 # ---------------------------------------------------------------------------
 
-def validate_all(data_root: Path = DATA_ROOT) -> Dict[str, ValidationReport]:
+
+def validate_all(data_root: Path = DATA_ROOT) -> dict[str, ValidationReport]:
     """Validates all datasets and returns a dict of reports."""
     reports = {}
     for name, func in [
@@ -394,7 +396,7 @@ def validate_all(data_root: Path = DATA_ROOT) -> Dict[str, ValidationReport]:
     return reports
 
 
-def print_summary(reports: Dict[str, ValidationReport]) -> None:
+def print_summary(reports: dict[str, ValidationReport]) -> None:
     """Prints a human-readable summary of validation results."""
     print("\n" + "=" * 70)
     print("VALIDATION SUMMARY")
@@ -412,11 +414,11 @@ def print_summary(reports: Dict[str, ValidationReport]) -> None:
         if report.sample:
             print(f"  Sample:    {report.sample}")
         if report.errors:
-            print(f"  Errors:")
+            print("  Errors:")
             for err in report.errors[:5]:
                 print(f"    - {err}")
         if report.warnings:
-            print(f"  Warnings:")
+            print("  Warnings:")
             for warn in report.warnings[:5]:
                 print(f"    - {warn}")
 
@@ -442,8 +444,16 @@ def validate_unified(data_root: Path = DATA_ROOT) -> dict[str, Any]:
         responses = pd.read_parquet(
             unified_dir / files["responses"],
             columns=[
-                "query_id", "config_id", "run_id", "source_dataset", "correct",
-                "in_tokens", "out_tokens", "latency_s", "cost_usd", "label_source",
+                "query_id",
+                "config_id",
+                "run_id",
+                "source_dataset",
+                "correct",
+                "in_tokens",
+                "out_tokens",
+                "latency_s",
+                "cost_usd",
+                "label_source",
             ],
         )
     except (KeyError, OSError, ValueError) as error:
@@ -513,10 +523,18 @@ def validate_unified(data_root: Path = DATA_ROOT) -> dict[str, Any]:
             f"manifest datasets={sorted(manifest_datasets)}, query sources={sorted(actual_datasets)}"
         )
 
-    response_query_sources = responses["query_id"].map(queries.drop_duplicates("query_id").set_index("query_id")["source_dataset"])
-    response_config_sources = responses["config_id"].map(configs.drop_duplicates("config_id").set_index("config_id")["source_dataset"])
-    query_source_mismatch = int((response_query_sources.notna() & (response_query_sources != responses["source_dataset"])).sum())
-    config_source_mismatch = int((response_config_sources.notna() & (response_config_sources != responses["source_dataset"])).sum())
+    response_query_sources = responses["query_id"].map(
+        queries.drop_duplicates("query_id").set_index("query_id")["source_dataset"]
+    )
+    response_config_sources = responses["config_id"].map(
+        configs.drop_duplicates("config_id").set_index("config_id")["source_dataset"]
+    )
+    query_source_mismatch = int(
+        (response_query_sources.notna() & (response_query_sources != responses["source_dataset"])).sum()
+    )
+    config_source_mismatch = int(
+        (response_config_sources.notna() & (response_config_sources != responses["source_dataset"])).sum()
+    )
     if query_source_mismatch:
         errors.append(f"responses: {query_source_mismatch} source_dataset mismatches against queries")
     if config_source_mismatch:
@@ -548,7 +566,9 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Validate raw datasets or the processed unified tables")
     parser.add_argument("--data-root", type=Path, default=DATA_ROOT, help="Root data directory")
-    parser.add_argument("--unified", action="store_true", help="Validate processed Parquet tables and manifest")
+    parser.add_argument(
+        "--unified", action="store_true", help="Validate processed Parquet tables and manifest"
+    )
     args = parser.parse_args(argv)
 
     if args.unified:

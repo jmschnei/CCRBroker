@@ -3,6 +3,7 @@
 Run on a Linux host with NVIDIA CUDA and the optional vLLM dependency installed.
 The script does not download data or infer GPU pricing; pass a verified hourly rate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,13 +53,17 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-model-len", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--gpu-usd-hour", type=float, required=True, help="Verified cost per GPU-hour")
-    parser.add_argument("--gpu-price-source", required=True, help="Provider invoice/rate-card URL or reference")
+    parser.add_argument(
+        "--gpu-price-source", required=True, help="Provider invoice/rate-card URL or reference"
+    )
     parser.add_argument("--utilization", type=float, default=0.6)
     parser.add_argument("--output", type=Path, default=ROOT / "outputs" / "phase0" / "throughput.jsonl")
     args = parser.parse_args(argv)
 
     if min(args.requests, args.batch_size, args.input_tokens, args.max_tokens) <= 0 or args.warmup < 0:
-        parser.error("requests, batch-size, input-tokens y max-tokens deben ser positivos; warmup no negativo")
+        parser.error(
+            "requests, batch-size, input-tokens y max-tokens deben ser positivos; warmup no negativo"
+        )
     if args.gpu_usd_hour <= 0 or not 0 < args.utilization <= 1:
         parser.error("gpu-usd-hour debe ser > 0 y utilization debe estar en (0, 1]")
     if platform.system() != "Linux":

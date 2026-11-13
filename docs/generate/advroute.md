@@ -103,7 +103,7 @@ Publicar un ataque exige divulgación responsable y acompañarlo de la defensa e
 ```python
     Búsqueda aleatoria/greedy de una secuencia de tokens que, antepuesta a cualquier
     consulta, MAXIMICE la puntuación de 'enviar al modelo caro' del router.
-    
+
     router_score(lista_de_textos) -> array de P(strong) (black-box, solo salidas).
     Devuelve (gadget, score_medio_inicial, score_medio_final). Evalúa defensas con él;
     no lo uses contra servicios de terceros.

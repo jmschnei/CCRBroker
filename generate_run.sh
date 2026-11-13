@@ -46,25 +46,25 @@ INFO() { echo -e "[${BOLD}INFO${NC}] $*"; }
 # ---------- GPU discovery ---------------------------------------------------
 discover_gpus() {
     INFO "=== Descubriendo GPUs ==="
-    
+
     if ! command -v nvidia-smi &>/dev/null; then
         ERROR "nvidia-smi no encontrado. ¿Tenés CUDA instalado y los drivers activos?"
     fi
-    
+
     local gpu_count
     gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -1)
     echo ""
     echo "GPU Count: $gpu_count"
     echo ""
-    
+
     nvidia-smi --query-gpu=index,name,memory.total,memory.free,driver_version,cuda_version \
         --format=csv,noheader,nounits
-    
+
     echo ""
     echo "PCIe topology:"
     nvidia-smi topo -m 2>/dev/null || echo "  (no disponible)"
     echo ""
-    
+
     # Check CUDA
     if command -v nvcc &>/dev/null; then
         echo "CUDA drivers: $(nvcc --version 2>/dev/null | grep release || echo 'unknown')"
@@ -98,22 +98,22 @@ else:
 # ---------- Setup -------------------------------------------------------------
 do_setup() {
     LOG "=== Instalando dependencias de generación ==="
-    
+
     if [[ ! -f "$VENV" ]]; then
         ERROR "venv no encontrado en $REPO_ROOT. Ejecutar 'make install' primero."
     fi
-    
+
     source "$VENV"
-    
+
     # Install base + vllm extras + evaluation deps
     LOG "Instalando vLLM y deps..."
     pip install -q "vllm>=0.6.0" "datasets>=2.16" "rouge-score" "sacrebleu" "jiwer" 2>&1 | tail -3
-    
+
     # Verify
     python3 -c "import vllm; print('vLLM version:', vllm.__version__)" 2>/dev/null || {
         ERROR "vLLM installation failed. Verificar compatibilidad CUDA."
     }
-    
+
     LOG "Dependencias instaladas: $(python3 -c 'import vllm; print(vllm.__version__)')"
 }
 
@@ -121,7 +121,7 @@ do_setup() {
 benchmark_model() {
     local model="$1"
     INFO "Benchmarking $model..."
-    
+
     source "$VENV"
     python3 << PYEOF
 import time, json, sys, os
@@ -152,17 +152,17 @@ benchmarks = [
 results = []
 for batch_size, max_out in benchmarks:
     prompts = ["What is the capital of France? Answer in one sentence."] * batch_size
-    
+
     t0 = time.time()
     outs = llm.generate(prompts, SamplingParams(temperature=0.2, max_tokens=max_out, seed=42))
     dt = time.time() - t0
-    
+
     total_in = sum(len(o.prompt_token_ids) for o in outs)
     total_out = sum(sum(c.token_ids for c in o.outputs) for o in outs)
-    
+
     output_tps = total_out / dt if dt > 0 else 0
     latency_per_req_ms = (dt / batch_size) * 1000 if batch_size > 0 else 0
-    
+
     results.append({
         "batch": batch_size,
         "max_out_tokens": max_out,
@@ -214,15 +214,15 @@ run_generation() {
     shift
     local n_samples="${1:-200}"
     local warmup="${2:-5}"
-    
+
     INFO "=== Running Phase $phase (N=$n_samples) ==="
-    
+
     if [[ ! -f "$VENV" ]]; then
         ERROR "venv not found. Run './generate_run.sh --setup' first."
     fi
-    
+
     source "$VENV"
-    
+
     # Load pinned models for this phase
     local phase_models
     case "$phase" in
@@ -232,7 +232,7 @@ run_generation() {
         5) phase_models=("Qwen/Qwen3-30B-A3B-Instruct-2507") ;;
         *) ERROR "Invalid phase: $phase (expected 2-5)" ;;
     esac
-    
+
     # Check pinned revisions
     for model in "${phase_models[@]}"; do
         local sha
@@ -253,11 +253,11 @@ except Exception as e:
     print(f'ERROR: {e}', file=sys.stderr)
     sys.exit(1)
 " 2>/dev/null || echo "FAILED")
-            
+
             if [[ "$latest_sha" == "FAILED" ]]; then
                 ERROR "Failed to fetch revision for $model. Check network/HF availability."
             fi
-            
+
             # Update pin file
             python3 -c "
 import json, time
@@ -274,14 +274,14 @@ print('Pinned to:', '$latest_sha')
 " 2>/dev/null || true
         fi
     done
-    
+
     # Run generation
     local out_dir="$OUTPUT_BASE/phase$phase"
     mkdir -p "$out_dir" "$LOG_DIR"
-    
+
     INFO "Output directory: $out_dir"
     INFO "Starting generation..."
-    
+
     python3 << PYEOF 2>&1 | tee "$LOG_DIR/phase${phase}_$(date +%F_%T).log"
 import json, os, sys, time, pandas as pd, numpy as np
 from pathlib import Path
@@ -303,7 +303,7 @@ if source_queries is None:
     # Use combined queries from dataset
     q_df, _, _ = pd.read_parquet("data/processed/unified/queries_combined.parquet"), None, None
     print(f"Using {len(q_df)} queries from unified dataset")
-    
+
 # Load pinned models
 pin_file = Path(os.path.expanduser("~/.codex/gpu_model_pins.json"))
 pins = {}
@@ -322,7 +322,7 @@ print(f"Loaded {len(models_pinned)} pinned models from {pin_file}")
 if PHASE == "2":
     budgets = [None, 128, 256, 512]  # token budgets
     efforts = ["nothink", "think_low", "think_mid", "think_high"]
-    
+
     config_models = {}
     for model_name, pin_info in models_pinned.items():
         config_models[model_name] = {
@@ -332,10 +332,10 @@ if PHASE == "2":
             "thinking": True if "think_low" in efforts else False,
             "price_source": "selfhost"
         }
-    
+
     configs_df = build_config_grid(config_models, budgets=budgets, efforts=efforts)
     print(f"Generated {len(configs_df)} config entries for Phase 2")
-    
+
     # Sample queries (stratified)
     if source_queries is None:
         q_df = pd.read_parquet("data/processed/unified/queries_combined.parquet")
@@ -348,36 +348,36 @@ if PHASE == "2":
         )
     else:
         sampled = source_queries
-    
+
     print(f"Sampled {len(sampled)} queries for generation")
-    
+
     # Generate with VLLMBackend (or Mock if no GPU)
     try:
         from vllm import LLM
         has_gpu = True
     except ImportError:
         has_gpu = False
-    
+
     backend_type = "vllm" if has_gpu else "mock"
     print(f"Using {backend_type} backend")
-    
+
     # Create output directory structure
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Run generation per model
     for model_name in models_pinned.keys():
         revision = models_pinned[model_name]["sha"]
         print(f"\nGenerating for {model_name} (revision: {revision[:12]})...")
-        
+
         if has_gpu:
             backend_factory = lambda m, rev: VLLMBackend(m, rev)
         else:
             skill = 0.7  # default skill for mock
             backend_factory = lambda m, rev: MockBackend(m, skill=skill)
-        
+
         # Import and run generation logic
         from generate.configroute import run
-        
+
         results_df = run(
             queries=sampled,
             configs=configs_df,
@@ -389,9 +389,9 @@ if PHASE == "2":
             seed=42,
             log=print
         )
-        
+
         print(f"Generated {len(results_df)} responses for {model_name}")
-        
+
         # Save summary
         summary = {
             "phase": PHASE,
@@ -403,35 +403,35 @@ if PHASE == "2":
             "backend": backend_type,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S")
         }
-        
+
         with open(OUT_DIR / f"summary_{model_name.replace('/', '_')}.json", "w") as f:
             json.dump(summary, f, indent=2)
 
 print(f"\nPhase {PHASE} generation complete!")
 PYEOF
-    
+
     INFO "Phase $phase completed. Results in $out_dir"
 }
 
 # ---------- SLURM job submission ---------------------------------------------
 submit_slurm() {
     local phase="$1"
-    
+
     if ! command -v sinfo &>/dev/null; then
         ERROR "sinfo not found. Are you on a SLURM cluster?"
     fi
-    
+
     INFO "Submitting Phase $phase to SLURM..."
-    
+
     # Get available GPUs
     local gpu_info
     gpu_info=$(sinfo -N -h -o "%n %G" | head -10)
     echo "Available nodes:"
     echo "$gpu_info"
-    
+
     # Submit job script
     local job_script="$LOG_DIR/submit_phase${phase}_$(date +%F_%T).sh"
-    
+
     cat > "$job_script" << SLURM_EOF
 #!/bin/bash
 #SBATCH --job-name=generate_phase${phase}
@@ -451,18 +451,18 @@ cd $REPO_ROOT
 ./generate_run.sh run ${phase} \$1 \$2
 
 SLURM_EOF
-    
+
     chmod +x "$job_script"
-    
+
     sbatch "$job_script" "${@:2}"  # Pass additional args to generation
-    
+
     INFO "Job submitted. Check status with 'squeue -u $USER'"
 }
 
 # ---------- Budget estimation -------------------------------------------------
 estimate_budget() {
     INFO "Estimating budget for Phase 2 (ConfigRoute)..."
-    
+
     source "$VENV"
     python3 << 'PYEOF'
 import json, time, os
@@ -504,7 +504,7 @@ for model_name, bench_data in benchmarks.items():
     if not results:
         print(f"\n{model_name}: No benchmark data")
         continue
-    
+
     # Use the 32-batch config for estimation
     thirty_two_batch = next((r for r in results if r["batch"] == 32), None)
     if not thirty_two_batch:
@@ -515,17 +515,17 @@ for model_name, bench_data in benchmarks.items():
     else:
         latency_s = thirty_two_batch["latency_s"] / 32
         output_tps = thirty_two_batch["output_tps"]
-    
+
     # Calculate GPU hours for this model
     total_requests = num_queries * num_configs
     total_latency_s = total_requests * latency_s
     gpu_hours = total_latency_s / 3600
-    
+
     print(f"\n{model_name}:")
     print(f"  Avg latency/req: {latency_s:.3f}s")
     print(f"  Output TPS: {output_tps}")
     print(f"  GPU hours (1x A100): {gpu_hours:.1f}")
-    
+
     total_gpu_hours += gpu_hours
 
 print(f"\n{'=' * 60}")
@@ -573,7 +573,7 @@ case "${1:-}" in
         if [[ -z "${2:-}" ]]; then
             ERROR "Uso: $0 --pin <model_name>"
         fi
-        
+
         source "$VENV"
         python3 << PYEOF
 import requests, json, time, os
@@ -586,20 +586,20 @@ try:
     r = requests.get(f"https://huggingface.co/api/models/{model}", timeout=30)
     r.raise_for_status()
     data = r.json()
-    
+
     sha = data.get("sha", "UNKNOWN")
     last_modified = data.get("lastModified", "UNKNOWN")
-    
+
     pin_file = Path(os.path.expanduser("~/.codex")) / "gpu_model_pins.json"
     pins = {}
     if pin_file.exists():
         with open(pin_file) as f:
             pins = json.load(f)
-    
+
     pins[model] = {"sha": sha, "pinned_at": last_modified}
     with open(pin_file, "w") as f:
         json.dump(pins, f, indent=2)
-    
+
     print(f"Pinned to: {sha[:12]}... ({last_modified})")
 except Exception as e:
     print(f"Error: {e}", file=__import__('sys').stderr)

@@ -15,6 +15,7 @@ from typing import Any
 
 class RoutingStrategy(str, Enum):
     """Strategy used to make the routing decision."""
+
     COST = "cost"
     QUALITY = "quality"
     LATENCY = "latency"
@@ -35,6 +36,7 @@ class Candidate:
         context_window: Max context window in tokens if known, else None.
         metadata: Additional metadata.
     """
+
     name: str
     capabilities: list[str] = field(default_factory=list)
     cost_per_1k_tokens: float | None = None
@@ -57,6 +59,7 @@ class RoutingDecision:
         all_scores: Scores for all candidates (model name -> score).
         latency_ms: How long the decision took.
     """
+
     query: str
     chosen_model: str
     strategy: RoutingStrategy

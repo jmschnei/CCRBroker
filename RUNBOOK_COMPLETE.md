@@ -1,7 +1,7 @@
 # RUNBOOK COMPLETO — Ejecución con GPU de todas las Fases
 
-**Repositorio:** `own_broker` (CCRBroker / routedata_kit)  
-**Fecha:** 2026-11-12  
+**Repositorio:** `own_broker` (CCRBroker / routedata_kit)
+**Fecha:** 2026-11-12
 **Dependencia crítica:** todas las fases que generan inferencias requieren un entorno Linux con NVIDIA CUDA y vLLM ≥ 0.6.
 
 ---
@@ -145,7 +145,7 @@ Cada ejecución genera una línea JSON en `outputs/phase0/throughput.jsonl` con:
 - Meta-hardware (GPU name, count, vLLM version, torch version)
 
 ### Gate de paso Fase 0
-> ✅ Cada modelo tiene al menos una medición válida con > 0 tok/s medidos.  
+> ✅ Cada modelo tiene al menos una medición válida con > 0 tok/s medidos.
 > ⛔ Si algún benchmark falla, revisar compatibilidad vLLM/torch/CUDA del modelo.
 
 ---
@@ -217,9 +217,9 @@ PYEOF
 ```
 
 ### Gate de paso Fase 1
-> ✅ Dataset unificado validado sin duplicados ni FK huérfanas.  
-> ✅ Auditoría confirma los 20 modelos del pool en los 15 datasets.  
-> ✅ Baselines locales reproducidos (macro: random≈0,478; best-single≈0,718; oracle_query≈0,916).  
+> ✅ Dataset unificado validado sin duplicados ni FK huérfanas.
+> ✅ Auditoría confirma los 20 modelos del pool en los 15 datasets.
+> ✅ Baselines locales reproducidos (macro: random≈0,478; best-single≈0,718; oracle_query≈0,916).
 > ⛔ Faltan: reproducción de ≥5 métodos publicados y evaluación completa en RouterArena `sub_10`.
 
 ---
@@ -507,9 +507,9 @@ python -m generate.run_phase3 report --drift-dir data/drift   # deriva por confi
 ```
 
 ### Puerta de paso Fase 3
-> ✅ ≥ 6 snapshots antes de afirmar tendencias.  
-> ✅ ≥ 3 eventos reales de pool/precio/revisión (o replays sobre versiones antiguas).  
-> ✅ Suelo de ruido medido y reportado.  
+> ✅ ≥ 6 snapshots antes de afirmar tendencias.
+> ✅ ≥ 3 eventos reales de pool/precio/revisión (o replays sobre versiones antiguas).
+> ✅ Suelo de ruido medido y reportado.
 > ⛔ Faltan: IC por evento (bootstrap pendiente), ejecución real con vLLM/GPU.
 
 ---
@@ -678,10 +678,10 @@ python -m generate.run_phase4 simulate \
 ```
 
 ### Puerta de paso Fase 4
-> ✅ Determinismo ≥ 0,95 (si se usan contrafactuales/clones).  
-> ✅ Tasa acciones válidas ≥ 80%.  
-> ✅ Headroom medible.  
-> ✅ Modelo de caché validado.  
+> ✅ Determinismo ≥ 0,95 (si se usan contrafactuales/clones).
+> ✅ Tasa acciones válidas ≥ 80%.
+> ✅ Headroom medible.
+> ✅ Modelo de caché validado.
 > ⛔ Faltan: adaptadores reales de τ²-Bench, ScienceWorld, SWE-bench, QA multi-salto.
 
 ---

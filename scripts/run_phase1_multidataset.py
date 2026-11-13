@@ -8,6 +8,7 @@ current generic defaults are 80/20 and seed 42; this script applies the local
 PLAN's explicit 70/30 and five seeds rather than claiming a byte-identical
 upstream split implementation.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -105,7 +106,10 @@ def _index_from_query_id(query_id: str) -> tuple[int, str]:
 
 
 def split_dataset_by_prompt(
-    query_ids: list[str], texts: list[str], train_ratio: float, seed: int | None = None,
+    query_ids: list[str],
+    texts: list[str],
+    train_ratio: float,
+    seed: int | None = None,
     rng: random.Random | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     """Split one dataset by unique prompt, mirroring upstream leakage prevention.
@@ -121,7 +125,7 @@ def split_dataset_by_prompt(
 
     prompt_rows: dict[str, list[int]] = defaultdict(list)
     prompt_min_index: dict[str, tuple[int, str]] = {}
-    for row_index, (query_id, text) in enumerate(zip(query_ids, texts)):
+    for row_index, (query_id, text) in enumerate(zip(query_ids, texts, strict=False)):
         prompt = str(text).strip()
         prompt_rows[prompt].append(row_index)
         idx = _index_from_query_id(query_id)
@@ -143,14 +147,20 @@ def split_dataset_by_prompt(
     test_idx = np.asarray(sorted(test_rows), dtype=int)
     if not len(train_idx) or not len(test_idx):
         raise ValueError("Split produced an empty train or test set")
-    return train_idx, test_idx, {
-        "unique_prompts": len(prompts),
-        "train_prompts": n_train_prompts,
-        "test_prompts": len(prompts) - n_train_prompts,
-    }
+    return (
+        train_idx,
+        test_idx,
+        {
+            "unique_prompts": len(prompts),
+            "train_prompts": n_train_prompts,
+            "test_prompts": len(prompts) - n_train_prompts,
+        },
+    )
 
 
-def audit_data(unified_dir: Path = UNIFIED) -> tuple[dict[str, Any], dict[str, tuple[list[str], list[str], np.ndarray]]]:
+def audit_data(
+    unified_dir: Path = UNIFIED,
+) -> tuple[dict[str, Any], dict[str, tuple[list[str], list[str], np.ndarray]]]:
     """Audit local pool, expected tasks, labels, score variation, and matrix coverage."""
     queries = pd.read_parquet(
         unified_dir / "queries_llmrouterbench.parquet",
@@ -167,7 +177,7 @@ def audit_data(unified_dir: Path = UNIFIED) -> tuple[dict[str, Any], dict[str, t
 
     found_models = set(responses["config_id"].unique())
     missing_models = sorted(set(OPEN_WEIGHT_MODELS) - found_models)
-    extra_models_in_selected_data: list[str] = []
+    _extra_models_in_selected_data: list[str] = []
     experiment_data: dict[str, tuple[list[str], list[str], np.ndarray]] = {}
     dataset_audit: dict[str, Any] = {}
     global_excluded_fallbacks: list[str] = []
@@ -180,10 +190,11 @@ def audit_data(unified_dir: Path = UNIFIED) -> tuple[dict[str, Any], dict[str, t
     query_text = queries.set_index("query_id")["prompt"]
     for dataset, spec in DATASET_SPEC.items():
         subset = responses[
-            responses["dataset"].eq(dataset)
-            & responses["config_id"].isin(OPEN_WEIGHT_MODELS)
+            responses["dataset"].eq(dataset) & responses["config_id"].isin(OPEN_WEIGHT_MODELS)
         ].copy()
-        fallback_qids = sorted(subset.loc[subset["label_source"].eq("aggregate_fallback"), "query_id"].unique())
+        fallback_qids = sorted(
+            subset.loc[subset["label_source"].eq("aggregate_fallback"), "query_id"].unique()
+        )
         global_excluded_fallbacks.extend(fallback_qids)
         # Exclude an entire query if any candidate score was aggregate-derived;
         # this preserves a common, complete 20-model candidate matrix.
@@ -195,7 +206,9 @@ def audit_data(unified_dir: Path = UNIFIED) -> tuple[dict[str, Any], dict[str, t
         pivot = pivot.loc[complete_mask]
         query_ids = sorted(pivot.index.astype(str).tolist(), key=_index_from_query_id)
         text_values = [str(query_text.loc[qid]) for qid in query_ids]
-        score_matrix = pivot.reindex(index=query_ids, columns=sorted(OPEN_WEIGHT_MODELS)).to_numpy(dtype=float)
+        score_matrix = pivot.reindex(index=query_ids, columns=sorted(OPEN_WEIGHT_MODELS)).to_numpy(
+            dtype=float
+        )
         if not np.isfinite(score_matrix).all() or ((score_matrix < 0) | (score_matrix > 1)).any():
             errors.append(f"{dataset}: scores must be finite and in [0,1]")
         if pivot.empty:
@@ -281,7 +294,9 @@ def _fit_predict(
         test_buckets = np.digitize(test_lengths, edges)
         choices: dict[int, int] = {}
         for bucket in np.unique(train_buckets):
-            choices[int(bucket)] = _argmax_stable(train_scores[train_buckets == bucket].mean(axis=0), model_ids)
+            choices[int(bucket)] = _argmax_stable(
+                train_scores[train_buckets == bucket].mean(axis=0), model_ids
+            )
         return np.asarray([choices.get(int(bucket), best_global) for bucket in test_buckets], dtype=int)
 
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=1, max_features=30_000, sublinear_tf=True)
@@ -292,7 +307,10 @@ def _fit_predict(
         k = min(15, n_train)
         neighbor_indices = np.argpartition(-similarities, kth=k - 1, axis=1)[:, :k]
         return np.asarray(
-            [_argmax_stable(train_scores[neighbors].mean(axis=0), model_ids) for neighbors in neighbor_indices],
+            [
+                _argmax_stable(train_scores[neighbors].mean(axis=0), model_ids)
+                for neighbors in neighbor_indices
+            ],
             dtype=int,
         )
     if strategy == "tfidf_classifier":
@@ -320,16 +338,21 @@ def _score_choices(test_scores: np.ndarray, choices: np.ndarray) -> dict[str, fl
         "oracle_avg_score": float(oracle.mean()),
         "absolute_oracle_score_gap": float((oracle - selected).mean()),
         "solvable_query_fraction": float(solvable.mean()),
-        "recall_failure_rate_on_solvable": float((selected[solvable] < 1.0).mean()) if solvable.any() else float("nan"),
+        "recall_failure_rate_on_solvable": float((selected[solvable] < 1.0).mean())
+        if solvable.any()
+        else float("nan"),
         "solvable_query_count": float(solvable.sum()),
         "recall_failure_count": float((selected[solvable] < 1.0).sum()),
     }
 
 
-def _summarize_seed(dataset_results: dict[str, dict[str, dict[str, float]]],
-                    dataset_sizes: dict[str, int], strategies: tuple[str, ...]) -> dict[str, Any]:
+def _summarize_seed(
+    dataset_results: dict[str, dict[str, dict[str, float]]],
+    dataset_sizes: dict[str, int],
+    strategies: tuple[str, ...],
+) -> dict[str, Any]:
     output: dict[str, Any] = {}
-    total_rows = sum(dataset_sizes.values())
+    _total_rows = sum(dataset_sizes.values())
     for strategy in strategies:
         metric_names = next(iter(next(iter(dataset_results.values())).values())).keys()
         output[strategy] = {}
@@ -346,15 +369,25 @@ def _summarize_seed(dataset_results: dict[str, dict[str, dict[str, float]]],
         random_scores = {ds: dataset_results[ds]["random"]["avg_score"] for ds in dataset_results}
         best_scores = {ds: dataset_results[ds]["best_single"]["avg_score"] for ds in dataset_results}
         oracle_scores = {ds: dataset_results[ds]["oracle_upper_bound"]["avg_score"] for ds in dataset_results}
-        gain_random = [macro_scores[ds] / random_scores[ds] - 1 for ds in dataset_results if random_scores[ds] > 0]
+        gain_random = [
+            macro_scores[ds] / random_scores[ds] - 1 for ds in dataset_results if random_scores[ds] > 0
+        ]
         gain_best = [macro_scores[ds] / best_scores[ds] - 1 for ds in dataset_results if best_scores[ds] > 0]
-        gap_oracle = [1 - macro_scores[ds] / oracle_scores[ds] for ds in dataset_results if oracle_scores[ds] > 0]
-        output[strategy]["gain_vs_random_macro"] = float(np.mean(gain_random)) if gain_random else float("nan")
-        output[strategy]["gain_vs_best_single_macro"] = float(np.mean(gain_best)) if gain_best else float("nan")
+        gap_oracle = [
+            1 - macro_scores[ds] / oracle_scores[ds] for ds in dataset_results if oracle_scores[ds] > 0
+        ]
+        output[strategy]["gain_vs_random_macro"] = (
+            float(np.mean(gain_random)) if gain_random else float("nan")
+        )
+        output[strategy]["gain_vs_best_single_macro"] = (
+            float(np.mean(gain_best)) if gain_best else float("nan")
+        )
         output[strategy]["gap_to_oracle_macro"] = float(np.mean(gap_oracle)) if gap_oracle else float("nan")
         solvable_n = sum(dataset_results[ds][strategy]["solvable_query_count"] for ds in dataset_results)
         failures_n = sum(dataset_results[ds][strategy]["recall_failure_count"] for ds in dataset_results)
-        output[strategy]["recall_failure_rate_pooled_solvable"] = failures_n / solvable_n if solvable_n else float("nan")
+        output[strategy]["recall_failure_rate_pooled_solvable"] = (
+            failures_n / solvable_n if solvable_n else float("nan")
+        )
     return output
 
 
@@ -387,9 +420,18 @@ def run_evaluation(
             for strategy in FITTED_ROUTER_NAMES:
                 # Random router gets distinct but deterministic random streams by dataset.
                 strategy_seed = seed + sorted(experiment_data).index(dataset) * 100_003
-                choice = _fit_predict(strategy, train_texts, test_texts, scores[train_idx], list(sorted(OPEN_WEIGHT_MODELS)), strategy_seed)
+                choice = _fit_predict(
+                    strategy,
+                    train_texts,
+                    test_texts,
+                    scores[train_idx],
+                    list(sorted(OPEN_WEIGHT_MODELS)),
+                    strategy_seed,
+                )
                 per_dataset[dataset][strategy] = _score_choices(scores[test_idx], choice)
-            dataset_best_model = _argmax_stable(scores[test_idx].mean(axis=0), list(sorted(OPEN_WEIGHT_MODELS)))
+            dataset_best_model = _argmax_stable(
+                scores[test_idx].mean(axis=0), list(sorted(OPEN_WEIGHT_MODELS))
+            )
             per_dataset[dataset]["dataset_oracle_upper_bound"] = _score_choices(
                 scores[test_idx], np.full(len(test_idx), dataset_best_model, dtype=int)
             )
@@ -397,12 +439,14 @@ def run_evaluation(
                 scores[test_idx], scores[test_idx].argmax(axis=1)
             )
 
-        seed_outputs.append({
-            "seed": seed,
-            "dataset_splits": split_audit,
-            "summary": _summarize_seed(per_dataset, dataset_sizes, strategies),
-            "by_dataset": per_dataset,
-        })
+        seed_outputs.append(
+            {
+                "seed": seed,
+                "dataset_splits": split_audit,
+                "summary": _summarize_seed(per_dataset, dataset_sizes, strategies),
+                "by_dataset": per_dataset,
+            }
+        )
 
     aggregate: dict[str, Any] = {}
     for strategy in strategies:
@@ -422,9 +466,7 @@ def run_evaluation(
                         "per_seed": values.tolist(),
                     }
             else:
-                values = np.asarray(
-                    [item["summary"][strategy][metric] for item in seed_outputs], dtype=float
-                )
+                values = np.asarray([item["summary"][strategy][metric] for item in seed_outputs], dtype=float)
                 aggregate[strategy][metric] = {
                     "mean": float(np.nanmean(values)),
                     "std_between_seeds": float(np.nanstd(values, ddof=1)),
@@ -440,7 +482,12 @@ def run_evaluation(
             "split_algorithm": "sort prompts by minimum source index; seeded Python random shuffle within each dataset; first floor(n_prompts*0.7) prompts train",
             "seeds": list(seeds),
             "routers": list(FITTED_ROUTER_NAMES),
-            "reference_baselines": ["random", "best_single", "dataset_oracle_upper_bound", "oracle_upper_bound"],
+            "reference_baselines": [
+                "random",
+                "best_single",
+                "dataset_oracle_upper_bound",
+                "oracle_upper_bound",
+            ],
             "oracle_note": "Best Single is train-selected. Dataset Oracle uses held-out test labels to select one best model per dataset and is a reference upper bound, not a deployable router. Instance Oracle is the per-query upper bound.",
             "labels": "per-record score; exclude whole MBPP query mbpp/test/665 because one model has aggregate_fallback; retain complete 20-model matrix otherwise",
             "upstream_comparability": "Matches the official pool, tasks, per-dataset prompt grouping, and leakage prevention. Uses local PLAN's five seeds and 70/30 rather than upstream generic defaults (often one seed / 80-20); the upstream repository uses configurable seeds and split ratios. Local router algorithms are baseline comparators, not claimed reproductions of five published learned routers.",
@@ -465,7 +512,7 @@ def _json_safe(value: Any) -> Any:
     """Convert NumPy scalars and non-finite floats to strict JSON-compatible values."""
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_json_safe(item) for item in value]
     if isinstance(value, np.generic):
         return _json_safe(value.item())
@@ -479,18 +526,26 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--unified-dir", type=Path, default=UNIFIED)
     parser.add_argument("--audit-output", type=Path, default=OUTPUT / "protocol_audit.json")
     parser.add_argument("--output", type=Path, default=OUTPUT / "llmrouterbench_15datasets.json")
-    parser.add_argument("--audit-only", action="store_true", help="Write protocol/data audit without fitting routers")
+    parser.add_argument(
+        "--audit-only", action="store_true", help="Write protocol/data audit without fitting routers"
+    )
     args = parser.parse_args(argv)
 
     audit, experiment_data = audit_data(args.unified_dir)
     args.audit_output.parent.mkdir(parents=True, exist_ok=True)
-    args.audit_output.write_text(json.dumps(_json_safe(audit), indent=2, ensure_ascii=False, allow_nan=False) + "\n")
-    print(f"Audit: {audit['candidate_count']} candidates · {len(audit['datasets'])} datasets · "
-          f"{audit['total_complete_queries']} complete per-instance queries")
+    args.audit_output.write_text(
+        json.dumps(_json_safe(audit), indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    )
+    print(
+        f"Audit: {audit['candidate_count']} candidates · {len(audit['datasets'])} datasets · "
+        f"{audit['total_complete_queries']} complete per-instance queries"
+    )
     for dataset, item in audit["datasets"].items():
-        print(f"  {dataset:16s} {item['complete_per_instance_queries']:5d}/"
-              f"{item['official_expected_prompts']:<4d} queries · {item['candidate_models']} models · "
-              f"fallback excluded={len(item['aggregate_fallback_query_ids_excluded'])}")
+        print(
+            f"  {dataset:16s} {item['complete_per_instance_queries']:5d}/"
+            f"{item['official_expected_prompts']:<4d} queries · {item['candidate_models']} models · "
+            f"fallback excluded={len(item['aggregate_fallback_query_ids_excluded'])}"
+        )
     for warning in audit["warnings"]:
         print(f"WARNING: {warning}")
     if audit["errors"]:
@@ -502,9 +557,15 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     result = run_evaluation(experiment_data)
-    result["audit_file"] = str(args.audit_output.relative_to(ROOT)) if args.audit_output.is_relative_to(ROOT) else str(args.audit_output)
+    result["audit_file"] = (
+        str(args.audit_output.relative_to(ROOT))
+        if args.audit_output.is_relative_to(ROOT)
+        else str(args.audit_output)
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(_json_safe(result), indent=2, ensure_ascii=False, allow_nan=False) + "\n")
+    args.output.write_text(
+        json.dumps(_json_safe(result), indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    )
     print("\nMacro dataset average (mean ± SD across seeds):")
     for strategy, values in result["summary_mean_std_across_seeds"].items():
         avg = values["avg_score"]["macro_dataset_average"]["mean"]

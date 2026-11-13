@@ -78,14 +78,20 @@ addopts = "-ra --strict-markers"
 [tool.ruff]
 line-length = 110
 target-version = "py310"
-extend-exclude = [".venv", "venv", "outputs"]
+extend-exclude = [".venv", "venv", "obenv", "outputs", "build"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
-ignore = ["B008"]
+# E501: ruff-format controla la longitud; quedan solo strings/comentarios largos.
+# E731/E741: estilo compacto habitual en el código científico del repo.
+ignore = ["B008", "E501", "E731", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Los scripts ajustan sys.path antes de importar el paquete.
+"scripts/*.py" = ["E402"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"  # stubs actuales de numpy usan sintaxis 3.12
 warn_return_any = true
 disallow_untyped_defs = false
 ignore_missing_imports = true

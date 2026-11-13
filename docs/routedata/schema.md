@@ -76,7 +76,7 @@ Se guardan en parquet si pyarrow está disponible; si no, en JSONL.
 
 ```python
     Convierte tablas largas en matrices Q[n,k] (calidad) y C[n,k] (coste USD).
-    
+
     Las celdas sin respuesta quedan como NaN; usa `mask` para filtrar.
     Coste = (in_tokens*price_in + (out_tokens)*price_out)/1e6, donde out_tokens
     ya incluye los tokens de razonamiento (se facturan como salida).

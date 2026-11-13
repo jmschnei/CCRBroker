@@ -180,28 +180,28 @@ from generate.advroute import perturb_benign, gadget_black_box
 ```python
 # Depende de: generate.backends.VLLMBackend + routedata.pricing.derive_selfhost_prices
 ```
-→ Usa VLLMBackend directamente para medir throughput por modelo  
+→ Usa VLLMBackend directamente para medir throughput por modelo
 → Escribe resultados a `outputs/phase0/throughput.jsonl`
 
 ### `scripts/run_phase1.py` — Ejecución directa Fase 1
 ```python
 # Depende de: routedata.metrics + baselines + stats
 ```
-→ Corre baselines locales (6 agents) sobre datos unificados  
+→ Corre baselines locales (6 agents) sobre datos unificados
 → Genera outputs/phase1/* con resultados por dataset
 
 ### `scripts/run_phase1_multidataset.py` — Auditoría multi-dataset
 ```python
 # Depende de: LLMRouterBench official pool + routedata.downloader
 ```
-→ Audita pool oficial 20 modelos × 15 datasets  
+→ Audita pool oficial 20 modelos × 15 datasets
 → Verifica reproducibilidad vs. resultados published
 
 ### `examples/routing_agents_demo.py` — Demo agentes routing
 ```python
 from routedata.agents import create_agent, Candidate
 ```
-→ Sin datos reales (solo muestra API de agents)  
+→ Sin datos reales (solo muestra API de agents)
 → Útil para testing y documentación de interfaz
 
 ### `examples/load_unified_dataset.py` — Carga dataset unificado
@@ -209,7 +209,7 @@ from routedata.agents import create_agent, Candidate
 from pandas import read_parquet
 # Loads data/processed/unified/* from pipeline output
 ```
-→ Estadísticas básicas + integridad del dataset procesado  
+→ Estadísticas básicas + integridad del dataset procesado
 → Ejemplo de uso real de schema unificado
 
 ---
@@ -253,7 +253,7 @@ generate/backends.py (VLLM/Mock inference) ←─ dependency root for phases 2-5
     └──► advroute.py (Fase 5 structure: perturbations + attacks)
 
 run_phase2.py ← configroute + build_queries + phase2 + judge + verifiers
-run_phase3.py ← driftroute + configroute + schema + pricing  
+run_phase3.py ← driftroute + configroute + schema + pricing
 run_phase4.py ← agentroute + envs/* + schema + stats
 ```
 

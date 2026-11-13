@@ -1,9 +1,7 @@
 """LLMRouterBench → unified schema adapter."""
 
 import json
-import os
 import sys
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -21,7 +19,7 @@ class LLMRouterBenchAdapter:
       - dataset_name: str
       - records: list of dicts with index, instance_id, origin_query, etc.
 
-    Strategy: 
+    Strategy:
     1. Group records by (dataset, split, query_id)
     2. Build wide table: one row per query, columns per model with scores
     3. Use wide_to_tables to convert to unified schema
@@ -50,7 +48,7 @@ class LLMRouterBenchAdapter:
                 print(f"  Read {i + 1}/{len(json_files)} files...")
 
             try:
-                with open(json_file, "r") as fh:
+                with open(json_file) as fh:
                     data = json.load(fh)
             except (json.JSONDecodeError, OSError) as e:
                 print(f"  Warning: could not read {json_file}: {e}")
@@ -106,9 +104,8 @@ class LLMRouterBenchAdapter:
         df = pd.DataFrame(rows)
 
         # Find all model columns
-        model_cols = [col for col in df.columns if col not in 
-                      ["query_id", "prompt", "domain", "answer"]]
-        
+        model_cols = [col for col in df.columns if col not in ["query_id", "prompt", "domain", "answer"]]
+
         if not model_cols:
             raise ValueError("No model columns found in LLMRouterBench data")
 
@@ -136,9 +133,7 @@ def _run(path: str | None) -> None:
     adapter = LLMRouterBenchAdapter()
     queries, configs, responses = adapter.load(path)
 
-    print(f"\nLLMRouterBench: {len(queries)} queries, "
-          f"{len(configs)} configs, "
-          f"{len(responses)} responses")
+    print(f"\nLLMRouterBench: {len(queries)} queries, {len(configs)} configs, {len(responses)} responses")
     models = sorted(responses["config_id"].dropna().unique())[:20]
     print("Models:", models)
 

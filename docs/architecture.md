@@ -1,6 +1,6 @@
 # 🏗️ Arquitectura del sistema routedata_kit
 
-Este documento describe la arquitectura de alto nivel, patrones de diseño y flujo de datos 
+Este documento describe la arquitectura de alto nivel, patrones de diseño y flujo de datos
 del kit `routing_data_kit` (CCRBroker) para benchmarks de routing LLM.
 
 ---
@@ -89,7 +89,7 @@ routedata/adapters/* (normalización de esquemas)
 routedata/pipeline.py (unificación → Parquet)
     │
     ├── queries_combined.parquet
-    ├── configs_combined.parquet  
+    ├── configs_combined.parquet
     └── responses_combined.parquet
     │
     ▼
@@ -144,8 +144,8 @@ class DatasetAdapter(ABC):
     @abstractmethod
     def load_raw(self, path: Path) -> DataFrame:
         pass
-    
-    @abstractmethod  
+
+    @abstractmethod
     def normalize_schema(self, df: DataFrame) -> DataFrame:
         pass
 
@@ -196,7 +196,7 @@ generate/run_phase3.py ← driftroute.py + configroute.py + schema
 generate/agentroute.py ← schema + agent.py (utilidades) + backends
 generate/run_phase4.py ← agentroute.py + envs/* + schemas
 generate/multilingual.py ← utils (traducción de queries)
-generate/judge.py ← backends + schema  
+generate/judge.py ← backends + schema
 generate/verifiers.py ← (lógica por dominio)
 generate/prompts.py ← templates (sin dependencias externas)
 ```
@@ -218,7 +218,7 @@ Query:
     language: Optional[str] # Idioma (en, es, de...)
     source_dataset: str    # Fuente (routerbench, sprout, llmrouterbench)
 
-# configs_combined.parquet  
+# configs_combined.parquet
 Config:
     config_id: str         # ID único de config
     model: str             # Nombre del modelo

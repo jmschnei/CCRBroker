@@ -49,7 +49,7 @@ upstream split implementation.
 
 ```python
     Split one dataset by unique prompt, mirroring upstream leakage prevention.
-    
+
     Prompt groups are ordered by the minimum numeric source index; a Python
     Random instance shuffles prompt positions, then the first floor(N*ratio)
     groups are assigned to train. All rows sharing prompt text remain together.

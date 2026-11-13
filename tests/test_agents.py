@@ -3,9 +3,10 @@
 Sin datos externos, sin red, sin GPU.
 Ejecuta:  pytest tests/test_agents.py
 """
+
 import pytest
 
-from routedata.agents import RoutingAgent, RoutingDecision, Candidate, create_agent
+from routedata.agents import Candidate, RoutingAgent, RoutingDecision, create_agent
 from routedata.agents.baseline import (
     CostAgent,
     HeuristicAgent,

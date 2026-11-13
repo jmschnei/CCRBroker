@@ -1,6 +1,6 @@
 # 📦 Módulo `generate/` — Dataset generation framework
 
-Este módulo implementa el framework de generación de datasets para las Fases 2–5, 
+Este módulo implementa el framework de generación de datasets para las Fases 2–5,
 incluyendo orquestadores CLI para cada fase.
 
 ---

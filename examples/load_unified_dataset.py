@@ -3,6 +3,7 @@
 Requiere haber ejecutado antes:  python -m routedata.pipeline load
 Uso:  python examples/load_unified_dataset.py
 """
+
 import json
 import os
 import sys
@@ -26,11 +27,9 @@ def main() -> None:
 
     queries = pd.read_parquet(UNIFIED / "queries_combined.parquet")
     configs = pd.read_parquet(UNIFIED / "configs_combined.parquet")
-    responses = pd.read_parquet(
-        UNIFIED / "responses_combined.parquet", columns=["query_id", "config_id"]
-    )
+    responses = pd.read_parquet(UNIFIED / "responses_combined.parquet", columns=["query_id", "config_id"])
 
-    print(f"\nQueries por dataset:")
+    print("\nQueries por dataset:")
     print(queries["source_dataset"].value_counts().to_string())
 
     bad_queries = int((~responses["query_id"].isin(set(queries["query_id"]))).sum())
