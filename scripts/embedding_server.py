@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -31,7 +32,17 @@ import numpy as np
 MODEL = "Alibaba-NLP/gte-Qwen2-7B-instruct"
 REVISION = "a8d08b36ada9cacfe34c4d6f80957772a025daf2"
 SERVED_NAME = "gte_Qwen2-7B-instruct"  # nombre que piden los configs de LLMRouterBench
-DEFAULT_CACHE = Path(__file__).resolve().parents[1] / "outputs" / "embeddings" / "gte_qwen2_7b.sqlite"
+# Truncado en tokens del modelo. 8192 = valor usado en el Mac (MPS); en el cluster (CUDA) se puede
+# subir con EMB_MAX_SEQ=32768 para no truncar más que upstream (25 000 tokens tiktoken).
+DEFAULT_MAX_SEQ = int(os.environ.get("EMB_MAX_SEQ", "8192"))
+# La clave de caché no incluye el truncado: cada truncado usa su propio fichero.
+DEFAULT_CACHE = Path(
+    os.environ.get("EMB_CACHE")
+    or Path(__file__).resolve().parents[1]
+    / "outputs"
+    / "embeddings"
+    / ("gte_qwen2_7b.sqlite" if DEFAULT_MAX_SEQ == 8192 else f"gte_qwen2_7b_L{DEFAULT_MAX_SEQ}.sqlite")
+)
 
 
 class EmbeddingCache:
@@ -68,7 +79,13 @@ class Encoder:
         import torch
         from sentence_transformers import SentenceTransformer
 
-        device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        if not device:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
         self.model = SentenceTransformer(
             MODEL,
             revision=REVISION,
@@ -99,7 +116,19 @@ def precompute(
     t0 = time.time()
     for i in range(0, len(todo), chunk):
         part = todo[i : i + chunk]
-        vecs, ntok = enc.encode(part, batch_size=batch_size)
+        bs = batch_size
+        while True:
+            try:
+                vecs, ntok = enc.encode(part, batch_size=bs)
+                break
+            except (RuntimeError, MemoryError) as e:  # OOM en CUDA / watchdog de la GPU en MPS
+                if bs == 1:
+                    raise
+                bs = max(1, bs // 2)
+                print(
+                    f"  error con batch {bs * 2} ({type(e).__name__}); reintento con batch {bs}", flush=True
+                )
+                _free_accelerator_memory()
         cache.put_many(list(zip(part, vecs, ntok, strict=True)))
         done = i + len(part)
         rate = done / max(1e-9, time.time() - t0)
@@ -107,6 +136,18 @@ def precompute(
             f"  {done}/{len(todo)}  ({rate:.1f} textos/s, ETA {(len(todo) - done) / max(rate, 1e-9) / 60:.0f} min)",
             flush=True,
         )
+
+
+def _free_accelerator_memory() -> None:
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
 
 def serve(port: int, cache: EmbeddingCache, enc_factory) -> None:
@@ -174,10 +215,10 @@ def serve(port: int, cache: EmbeddingCache, enc_factory) -> None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=("serve", "precompute"))
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=int(os.environ.get("LLMRB_EMB_PORT", "8765")))
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     ap.add_argument("--device", help="mps | cuda | cpu (por defecto: mps si está disponible)")
-    ap.add_argument("--max-seq-length", type=int, default=8192)
+    ap.add_argument("--max-seq-length", type=int, default=DEFAULT_MAX_SEQ)
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--texts", type=Path, help="JSONL con {'text': ...} por línea (precompute)")
     a = ap.parse_args(argv)

@@ -45,6 +45,8 @@ Si `external/LLMRouterBench` no existe: el orquestador lo clona en el commit fij
 bert_score beartype joblib matplotlib seaborn` y los pines `transformers<4.52`,
 `sentence-transformers<5`, `huggingface_hub<1.0`, `datasets<4.0`.
 
+Para ejecutarlo en el cluster Slurm (contenedor pyxis, GPU CUDA): `docs/slurm_llmrouterbench.md`.
+
 ## Partes del orquestador aún sin validar
 
 Escritas a partir del código upstream, pendientes de la primera ejecución real:

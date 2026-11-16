@@ -42,7 +42,7 @@ PY = LLMRB / ".venv" / "bin" / "python"
 OUT = ROOT / "outputs" / "llmrouterbench_repro"
 SEEDS = (42, 999, 2024, 2025, 3407)
 SPLIT = 0.7
-PORT = 8765
+PORT = int(os.environ.get("LLMRB_EMB_PORT", "8765"))  # en Slurm: un puerto por trabajo
 EMB_URL = f"http://127.0.0.1:{PORT}/v1"
 EMB_MODEL = "gte_Qwen2-7B-instruct"
 PERF_CFG = "config/baseline_config.yaml"
@@ -78,7 +78,11 @@ def _run(cmd: list[str], log: Path, cwd: Path = LLMRB) -> str:
 def ensure_checkout() -> None:
     if not (LLMRB / ".git").exists():
         subprocess.run(["git", "clone", LLMRB_REPO, str(LLMRB)], check=True)
-    subprocess.run(["git", "checkout", "-q", "--detach", LLMRB_COMMIT], cwd=LLMRB, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=LLMRB, capture_output=True, text=True
+    ).stdout.strip()
+    if head != LLMRB_COMMIT:  # evita carreras en el índice de git con varios trabajos Slurm a la vez
+        subprocess.run(["git", "checkout", "-q", "--detach", LLMRB_COMMIT], cwd=LLMRB, check=True)
     bench = LLMRB / "results" / "bench"
     if not bench.exists():
         bench.symlink_to(ROOT / "data" / "raw" / "llmrouterbench" / "extracted" / "bench-release")
@@ -497,6 +501,26 @@ def _dataset_avg(res: dict[str, Any]) -> float | None:
     return None
 
 
+TEXTS_CODE = """
+import json, sys
+from baselines import BaselineDataLoader
+texts = set()
+for cfg in ["config/baseline_config.yaml", "config/baseline_config_performance_cost.yaml"]:
+    texts |= {r.prompt for r in BaselineDataLoader(cfg).load_all_records()}
+with open(sys.argv[1], "w") as f:
+    for t in sorted(texts):
+        f.write(json.dumps({"text": t}, ensure_ascii=False) + "\\n")
+print(len(texts), "prompts únicos")
+"""
+
+
+def export_texts(dest: Path) -> None:
+    """Lista de prompts únicos (ambos settings) que embeben los adaptadores: entrada de `precompute`."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _run([PY, "-c", TEXTS_CODE, dest.resolve()], OUT / "export_texts.log")
+    print(f"→ {dest}", flush=True)
+
+
 ROUTERS = {
     "avengers": run_avengers,
     "embedllm": run_embedllm,
@@ -537,7 +561,8 @@ def summary() -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("run", "summary"))
+    ap.add_argument("cmd", choices=("setup", "texts", "run", "summary"))
+    ap.add_argument("--texts-out", type=Path, default=ROOT / "outputs" / "embeddings" / "texts.jsonl")
     ap.add_argument("--routers", default=",".join(ROUTERS))
     ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
     a = ap.parse_args(argv)
@@ -545,6 +570,11 @@ def main(argv: list[str] | None = None) -> None:
         summary()
         return
     ensure_checkout()
+    if a.cmd == "setup":
+        return
+    if a.cmd == "texts":
+        export_texts(a.texts_out)
+        return
     emb = embedding_config()
     server = ensure_embedding_server()
     try:
