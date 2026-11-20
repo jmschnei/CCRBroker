@@ -8,8 +8,10 @@ SCRATCH="${SCRATCH:-/netscratch/$USER}"
 
 # --- Slurm / contenedor (ajustar a lo que muestren `sinfo -s` y `ls /enroot`) ------------
 IMAGE="${IMAGE:-/enroot/nvcr.io_nvidia_pytorch_24.12-py3.sqsh}"
-PARTITION_GPU="${PARTITION_GPU:-A100-80GB}"
-PARTITION_CPU="${PARTITION_CPU:-batch}"
+#PARTITION_GPU="${PARTITION_GPU:-A100-80GB}"
+PARTITION_GPU="${PARTITION_GPU:-H100-SLT,H200,H200-PCI,H100,H100-PCI,B200,RTXB6000,A100-80GB}"
+# PARTITION_CPU="${PARTITION_CPU:-batch}"
+PARTITION_CPU="${PARTITION_CPU:-RTXA6000-SLT}"
 CONTAINER_MOUNTS="/netscratch/$USER:/netscratch/$USER,/ds:/ds:ro,$REPO_DIR:$REPO_DIR"
 
 # --- Experimento ------------------------------------------------------------------------
