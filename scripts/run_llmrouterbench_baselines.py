@@ -198,9 +198,17 @@ def run_avengers(seed: int, emb: Path) -> None:
         ],
         work / "router.log",
     )
-    res = json.loads(out.read_text())
-    per_ds = {k: v.get("accuracy") for k, v in res.get("dataset_performance", {}).items()}
-    _save("avengers", seed, {"accuracy": res["accuracy"], "per_dataset": per_ds, "config": cfg})
+    _save("avengers", seed, {**_avengers_metrics(out), "config": cfg})
+
+
+def _avengers_metrics(out: Path) -> dict[str, Any]:
+    res = json.loads(out.read_text())["results"]  # {timestamp, config, results}
+    return {
+        "accuracy": res["accuracy"],  # media por dataset, en %
+        "sample_avg": res.get("all_sample_avg"),
+        "total_cost": res.get("cost_analysis", {}).get("total_cost"),
+        "per_dataset": {k: v.get("accuracy") for k, v in res.get("dataset_performance", {}).items()},
+    }
 
 
 def run_avengers_pro(seed: int, emb: Path) -> None:
@@ -257,35 +265,18 @@ def run_avengers_pro(seed: int, emb: Path) -> None:
         ],
         work / "ablation.log",
     )
-    found = sorted((work / "ablation").rglob("*.json"))
-    curve = _collect_ablation_curve(found)
+    concise = json.loads((work / "ablation" / "results" / "weight_ablation_concise.json").read_text())
+    curve = [
+        {
+            "performance_weight": round(float(r["performance_weight"]), 4),
+            "accuracy": float(r["non_ood_accuracy"]),  # media por dataset, en %
+            "sample_avg": float(r["non_ood_sample_avg"]),
+            "total_cost": float(r["non_ood_total_cost"]),
+        }
+        for r in concise["router_results"]
+    ]
     a1 = next((p for p in curve if abs(p["performance_weight"] - 1.0) < 1e-9), None)
     _save("avengers_pro", seed, {"accuracy": a1["accuracy"] if a1 else None, "curve": curve, "config": base})
-
-
-def _collect_ablation_curve(files: list[Path]) -> list[dict[str, float]]:
-    """Extrae (α, accuracy, coste) de los ficheros que deja run_weight_ablation."""
-    pts: dict[float, dict[str, float]] = {}
-    for f in files:
-        try:
-            obj = json.loads(f.read_text())
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        stack = [obj]
-        while stack:
-            x = stack.pop()
-            if isinstance(x, dict):
-                if "performance_weight" in x and "accuracy" in x:
-                    w = round(float(x["performance_weight"]), 4)
-                    pts[w] = {
-                        "performance_weight": w,
-                        "accuracy": float(x["accuracy"]),
-                        **({"total_cost": float(x["total_cost"])} if "total_cost" in x else {}),
-                    }
-                stack.extend(x.values())
-            elif isinstance(x, list):
-                stack.extend(x)
-    return [pts[k] for k in sorted(pts)]
 
 
 def run_embedllm(seed: int, emb: Path) -> None:
@@ -376,15 +367,12 @@ def run_graphrouter(seed: int, emb: Path, scenarios=("PF", "BL", "CF")) -> None:
     cfg = yaml.safe_load(base_cfg)
     results = {}
     for sc in scenarios:
+        data = LLMRB / out_dir
         cfg.update(
             {
-                "llm_description_path": f"../../{out_dir}/LLM_Descriptions.json".replace(
-                    "baselines/GraphRouter/", ""
-                ),
-                "llm_embedding_path": f"{out_dir}/llm_description_embedding.pkl".replace(
-                    "baselines/GraphRouter/", ""
-                ),
-                "saved_router_data_path": f"{out_dir}/router_data.csv".replace("baselines/GraphRouter/", ""),
+                "llm_description_path": str(data / "LLM_Descriptions.json"),
+                "llm_embedding_path": str(data / "llm_description_embedding.pkl"),
+                "saved_router_data_path": str(data / "router_data.csv"),
                 "model_path": str((work / f"best_{sc}.pth").resolve()),
                 "train_epoch": 10000,  # apéndice B.3
                 "scenario": names[sc],
@@ -392,7 +380,6 @@ def run_graphrouter(seed: int, emb: Path, scenarios=("PF", "BL", "CF")) -> None:
                 "split_ratio": [SPLIT, 0.0, round(1 - SPLIT, 4)],
             }
         )
-        cfg["llm_description_path"] = cfg["llm_description_path"].replace("../../", "")
         cfg_path = work / f"config_{sc}.yaml"
         cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
         log = _run(
@@ -400,9 +387,15 @@ def run_graphrouter(seed: int, emb: Path, scenarios=("PF", "BL", "CF")) -> None:
             work / f"train_{sc}.log",
             cwd=LLMRB / "baselines" / "GraphRouter",
         )
-        best = _floats(r"Dataset-Level Average Accuracy:\s+([0-9.]+)", log)
-        cost = _floats(r"Total Cost:\s+([0-9.]+)", log)
-        results[sc] = {"accuracy": 100 * best[-1] if best else None, "total_cost": cost[-1] if cost else None}
+        # graph_nn.py imprime primero el "BEST TEST CHECKPOINT" (criterio upstream) y después "LAST EPOCH"
+        acc = _floats(r"Dataset-Level Average Accuracy:\s+([0-9.]+)", log)
+        cost = _floats(r"(?m)^\s*Total Cost:\s+([0-9.]+)", log)
+        results[sc] = {
+            "accuracy": 100 * acc[0] if acc else None,
+            "accuracy_last_epoch": 100 * acc[-1] if len(acc) > 1 else None,
+            "total_cost": cost[0] if cost else None,
+            "total_cost_last_epoch": cost[-1] if len(cost) > 1 else None,
+        }
     _save("graphrouter", seed, {"accuracy": results.get("PF", {}).get("accuracy"), "scenarios": results})
 
 
@@ -493,12 +486,9 @@ def run_routellm(seed: int, emb: Path) -> None:
 
 
 def _dataset_avg(res: dict[str, Any]) -> float | None:
-    """Media por dataset de la accuracy del modelo elegido (definición de las Tablas 11/12)."""
-    for key in ("per_dataset", "dataset_accuracy", "datasets"):
-        if isinstance(res.get(key), dict) and res[key]:
-            vals = [v["accuracy"] if isinstance(v, dict) else v for v in res[key].values()]
-            return 100 * sum(vals) / len(vals) if max(vals) <= 1 else sum(vals) / len(vals)
-    return None
+    """Media por dataset de la accuracy del modelo elegido (definición de las Tablas 11/12), en %."""
+    v = res.get("all_dataset_avg")
+    return 100 * v if v is not None else None
 
 
 TEXTS_CODE = """

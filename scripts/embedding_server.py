@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--device", help="mps | cuda | cpu (por defecto: mps si está disponible)")
     ap.add_argument("--max-seq-length", type=int, default=DEFAULT_MAX_SEQ)
     ap.add_argument("--batch-size", type=int, default=8)
+    ap.add_argument("--chunk", type=int, default=256, help="textos por escritura en la caché (precompute)")
     ap.add_argument("--texts", type=Path, help="JSONL con {'text': ...} por línea (precompute)")
     a = ap.parse_args(argv)
     cache = EmbeddingCache(a.cache)
@@ -228,7 +229,7 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit("precompute requiere --texts")
         # split("\n") y no splitlines(): algunos prompts contienen U+2028/U+2029 dentro del JSON
         texts = [json.loads(line)["text"] for line in a.texts.read_text().split("\n") if line.strip()]
-        precompute(texts, cache, Encoder(a.device, a.max_seq_length), a.batch_size)
+        precompute(texts, cache, Encoder(a.device, a.max_seq_length), a.batch_size, a.chunk)
     else:
         serve(a.port, cache, lambda: Encoder(a.device, a.max_seq_length))
 
