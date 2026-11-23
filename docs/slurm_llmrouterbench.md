@@ -173,6 +173,10 @@ Archivos que conviene guardar con los resultados: `outputs/slurm/llmrb_env_freez
   artefactos con rsync.
 - **`El servidor de embeddings no arrancó`:** mira `outputs/llmrouterbench_repro/embedding_server.log`.
   Si el puerto está ocupado, exporta `LLMRB_EMB_PORT` con otro valor.
+- **Un router terminó pero falló al leer su resultado:** con `LLMRB_REUSE=1` (o `--reuse`) se
+  vuelven a leer los logs y resultados ya completos de Avengers y EmbedLLM sin reentrenar, y la
+  ejecución sigue con los demás routers:
+  `LLMRB_REUSE=1 ./slurm/llmrb/submit.sh routers 42`.
 - **Volver a lanzar un router:** se sobrescriben `outputs/llmrouterbench_repro/<router>/seed<k>*`.
   Los adaptadores regeneran sus datos en `external/LLMRouterBench/baselines/*/data/`.
 

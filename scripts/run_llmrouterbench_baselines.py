@@ -60,6 +60,9 @@ PAPER = {
     "avengers_pro_alpha1.00": 68.58,
 }
 
+# Reaprovechar salidas de una ejecución anterior completa (no reentrena): --reuse o LLMRB_REUSE=1
+REUSE = os.environ.get("LLMRB_REUSE", "") not in ("", "0")
+
 ENV = {**os.environ, "WANDB_MODE": "disabled", "TOKENIZERS_PARALLELISM": "false", "PYTHONUNBUFFERED": "1"}
 
 
@@ -150,6 +153,15 @@ def _floats(pattern: str, text: str) -> list[float]:
 def run_avengers(seed: int, emb: Path) -> None:
     d = f"baselines/AvengersPro/data/small_models/seed{seed}_split{SPLIT}"
     work = OUT / "avengers" / f"seed{seed}"
+    out = work / "results.json"
+    if REUSE and out.exists() and (work / "config.json").exists():
+        print(f"(reuse) {out.relative_to(ROOT)}", flush=True)
+        _save(
+            "avengers",
+            seed,
+            {**_avengers_metrics(out), "config": json.loads((work / "config.json").read_text())},
+        )
+        return
     _run(
         [
             PY,
@@ -185,7 +197,6 @@ def run_avengers(seed: int, emb: Path) -> None:
         "ood_datasets": [],
     }
     (work / "config.json").write_text(json.dumps(cfg, indent=2))
-    out = work / "results.json"
     _run(
         [
             PY,
@@ -283,6 +294,11 @@ def run_embedllm(seed: int, emb: Path) -> None:
     base = "baselines/EmbedLLM/data/small_models"
     d = f"{base}/seed{seed}_split{SPLIT}"
     work = OUT / "embedllm" / f"seed{seed}"
+    train_log = work / "train.log"
+    if REUSE and train_log.exists() and "BEST PERFORMANCE" in train_log.read_text(errors="replace"):
+        print(f"(reuse) {train_log.relative_to(ROOT)}", flush=True)
+        _save("embedllm", seed, _embedllm_metrics(train_log.read_text(errors="replace")))
+        return
     _run(
         [
             PY,
@@ -325,18 +341,29 @@ def run_embedllm(seed: int, emb: Path) -> None:
         work / "train.log",
         cwd=LLMRB / "baselines" / "EmbedLLM" / "algorithm",
     )
-    per_epoch = _floats(
-        r"^Dataset-Level Average Accuracy: ([0-9.]+)", "\n".join(line.strip() for line in log.splitlines())
-    )
-    _save(
-        "embedllm",
-        seed,
-        {
-            "accuracy": 100 * max(per_epoch),  # criterio upstream: mejor época según test
-            "accuracy_last_epoch": 100 * per_epoch[-1],
-            "epochs_evaluated": len(per_epoch),
-        },
-    )
+    _save("embedllm", seed, _embedllm_metrics(log))
+
+
+def _embedllm_metrics(log: str) -> dict[str, Any]:
+    """Métricas de test de mf.py (modo router).
+
+    Por época, mf.py imprime en el bloque de TEST una línea sin sangría
+    "Dataset-Level Average Accuracy: X". El evaluador imprime además, con sangría y el sufijo
+    "(unweighted)", la misma métrica para train y test: esas se excluyen. Al final imprime
+    "Best Dataset-Level Accuracy: X at Epoch N" (criterio upstream: mejor época según el test).
+    tqdm escribe en la misma salida con \\r, así que no se ancla al inicio de línea.
+    """
+    per_epoch = _floats(r"(?m)Dataset-Level Average Accuracy: ([0-9.]+)[ \t]*$", log)
+    best = re.findall(r"Best Dataset-Level Accuracy: ([0-9.]+) at Epoch (\d+)", log)
+    if not per_epoch and not best:
+        raise RuntimeError("No se encontraron métricas de test en el log de EmbedLLM (mf.py)")
+    best_acc = float(best[-1][0]) if best else max(per_epoch)
+    return {
+        "accuracy": 100 * best_acc,  # criterio upstream: mejor época según test
+        "best_epoch": int(best[-1][1]) if best else None,
+        "accuracy_last_epoch": 100 * per_epoch[-1] if per_epoch else None,
+        "epochs_evaluated": len(per_epoch),
+    }
 
 
 def run_graphrouter(seed: int, emb: Path, scenarios=("PF", "BL", "CF")) -> None:
@@ -555,7 +582,15 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--texts-out", type=Path, default=ROOT / "outputs" / "embeddings" / "texts.jsonl")
     ap.add_argument("--routers", default=",".join(ROUTERS))
     ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
+    ap.add_argument(
+        "--reuse",
+        action="store_true",
+        help="reaprovecha logs/resultados de ejecuciones completas (Avengers, EmbedLLM) sin reentrenar",
+    )
     a = ap.parse_args(argv)
+    if a.reuse:
+        global REUSE
+        REUSE = True
     if a.cmd == "summary":
         summary()
         return
